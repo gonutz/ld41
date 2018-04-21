@@ -8,11 +8,12 @@ import (
 )
 
 const (
-	playerSpeed        = 4
-	playerW, playerH   = 172, 207
-	bulletShootOffsetY = 103
-	bulletW, bulletH   = 27, 9
-	zombieW, zombieH   = 116, 218
+	playerSpeed          = 4
+	playerW, playerH     = 172, 207
+	bulletShootOffsetY   = 103
+	bulletW, bulletH     = 27, 9
+	zombieW, zombieH     = 116, 218
+	deadHeadW, deadHeadH = 87, 103
 )
 
 type playingState struct {
@@ -25,6 +26,7 @@ type playingState struct {
 	numbers          []fadingNumber
 	nextZombie       int // time until next zombie spawns
 	shootBan         int // time until shooting is allowed after wrong number
+	score            int
 }
 
 func (s *playingState) enter(state) {
@@ -36,6 +38,7 @@ func (s *playingState) enter(state) {
 	}
 	s.assignment = s.generator.generate(rand.Int)
 	s.newZombie()
+	s.score = 0
 }
 
 func (*playingState) leave() {}
@@ -209,6 +212,14 @@ func (s *playingState) update(window draw.Window) state {
 		}
 		window.DrawImageFile(file(img), b.x, b.y)
 	}
+	// score
+	{
+		window.DrawImageFile(file("dead head.png"), 0, 0)
+		text := romanNumeral(s.score)
+		const textScale = 3
+		_, h := window.GetScaledTextSize(text, textScale)
+		window.DrawScaledText(text, deadHeadW, (deadHeadH-h)/2, textScale, draw.Red)
+	}
 	// fading numbers from the past
 	for _, num := range s.numbers {
 		scale := 3 + 6*(1-num.life)
@@ -250,6 +261,7 @@ func (s *playingState) shoot(window draw.Window) {
 func (s *playingState) killZombie(i int) {
 	copy(s.zombies[i:], s.zombies[i+1:])
 	s.zombies = s.zombies[:len(s.zombies)-1]
+	s.score++
 }
 
 func (s *playingState) addFadingNumber(n int, color draw.Color) {
