@@ -23,11 +23,15 @@ func (s *menuState) update(window draw.Window) state {
 	if window.WasKeyPressed(draw.KeyEscape) {
 		window.Close()
 	}
+	oldItem := s.hotItem
 	if window.WasKeyPressed(draw.KeyDown) {
 		s.hotItem = (s.hotItem + 1) % len(s.items)
 	}
 	if window.WasKeyPressed(draw.KeyUp) {
 		s.hotItem = (s.hotItem + len(s.items) - 1) % len(s.items)
+	}
+	if s.hotItem != oldItem {
+		window.PlaySoundFile(file("menu beep.wav"))
 	}
 	if window.WasKeyPressed(draw.KeyEnter) || window.WasKeyPressed(draw.KeyNumEnter) {
 		switch s.hotItem {
