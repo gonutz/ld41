@@ -21,6 +21,7 @@ type state interface {
 var (
 	loading state = &loadingState{}
 	playing state = &playingState{}
+	dead    state = &deadState{}
 )
 
 func main() {

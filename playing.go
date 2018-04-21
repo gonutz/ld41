@@ -32,12 +32,17 @@ type playingState struct {
 func (s *playingState) enter(state) {
 	s.playerX = (windowW - playerW) / 2
 	s.playerY = windowH - playerH - 100
+	s.playerFacingLeft = false
 	s.generator = mathGenerator{
 		ops: []mathOp{add, subtract, add, subtract, multiply, divide},
 		max: 9,
 	}
 	s.assignment = s.generator.generate(rand.Int)
+	s.bullets = nil
+	s.zombies = nil
+	s.numbers = nil
 	s.newZombie()
+	s.shootBan = 0
 	s.score = 0
 }
 
@@ -90,17 +95,18 @@ func (s *playingState) update(window draw.Window) state {
 		}
 	}
 	// move left/right
+	const margin = -50
 	if window.IsKeyDown(draw.KeyLeft) || window.IsKeyDown(draw.KeyA) {
 		s.playerX -= playerSpeed
-		if s.playerX < 100 {
-			s.playerX = 100
+		if s.playerX < margin {
+			s.playerX = margin
 		}
 		s.playerFacingLeft = true
 	}
 	if window.IsKeyDown(draw.KeyRight) || window.IsKeyDown(draw.KeyD) {
 		s.playerX += playerSpeed
-		if s.playerX+playerW > windowW-100 {
-			s.playerX = windowW - 100 - playerW
+		if s.playerX+playerW > windowW-margin {
+			s.playerX = windowW - margin - playerW
 		}
 		s.playerFacingLeft = false
 	}
@@ -167,6 +173,10 @@ func (s *playingState) update(window draw.Window) state {
 			z.x -= 2
 		} else {
 			z.x += 2
+		}
+		const hitDist = 30
+		if abs((s.playerX+playerW/2)-(z.x+zombieW/2)) < hitDist {
+			return dead
 		}
 	}
 
