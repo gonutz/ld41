@@ -205,8 +205,8 @@ func (s *playingState) update(window draw.Window) state {
 		scale := 3 + 6*(1-num.life)
 		color := num.color
 		color.A = num.life
-		w, _ := window.GetScaledTextSize(num.text, scale)
-		window.DrawScaledText(num.text, (windowW-w)/2, 50, scale, color)
+		w, h := window.GetScaledTextSize(num.text, scale)
+		window.DrawScaledText(num.text, (windowW-w)/2, 100-h/2, scale, color)
 	}
 	// assigment
 	const mathScale = 2
