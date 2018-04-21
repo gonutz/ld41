@@ -29,20 +29,34 @@ func (s *playingState) enter(state) {
 
 func (*playingState) leave() {}
 
+var fireKeys = [10][2]draw.Key{
+	{draw.Key0, draw.KeyNum0},
+	{draw.Key1, draw.KeyNum1},
+	{draw.Key2, draw.KeyNum2},
+	{draw.Key3, draw.KeyNum3},
+	{draw.Key4, draw.KeyNum4},
+	{draw.Key5, draw.KeyNum5},
+	{draw.Key6, draw.KeyNum6},
+	{draw.Key7, draw.KeyNum7},
+	{draw.Key8, draw.KeyNum8},
+	{draw.Key9, draw.KeyNum9},
+}
+
 func (s *playingState) update(window draw.Window) state {
 	// handle input
 	if window.WasKeyPressed(draw.KeyEscape) {
 		// TODO eventually go to a pause menu here
 		window.Close()
 	}
-	if window.WasKeyPressed(draw.KeyEnter) {
+	keys := fireKeys[s.assignment.answer]
+	if window.WasKeyPressed(keys[0]) || window.WasKeyPressed(keys[1]) {
 		s.assignment = s.generator.generate(rand.Int)
 	}
-	if window.IsKeyDown(draw.KeyLeft) {
+	if window.IsKeyDown(draw.KeyLeft) || window.IsKeyDown(draw.KeyA) {
 		s.playerX -= playerSpeed
 		s.playerFacingLeft = true
 	}
-	if window.IsKeyDown(draw.KeyRight) {
+	if window.IsKeyDown(draw.KeyRight) || window.IsKeyDown(draw.KeyD) {
 		s.playerX += playerSpeed
 		s.playerFacingLeft = false
 	}
