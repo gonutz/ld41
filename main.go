@@ -19,13 +19,18 @@ type state interface {
 
 // all game states
 var (
+	loading state = &loadingState{}
 	playing state = &playingState{}
 )
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
-	state := playing
+
+	state := loading
 	state.enter(nil)
+
+	defer cleanUpAssets()
+
 	check(draw.RunWindow(title, windowW, windowH, func(window draw.Window) {
 		newState := state.update(window)
 		if state != newState {

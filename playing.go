@@ -66,12 +66,12 @@ func (s *playingState) update(window draw.Window) state {
 	const playerY = 250
 	window.FillRect(0, 0, windowW, windowH, draw.RGB(0, 0.5, 1))
 	if s.playerFacingLeft {
-		window.DrawImageFile("rsc/hero left.png", s.playerX, playerY)
+		window.DrawImageFile(file("hero left.png"), s.playerX, playerY)
 	} else {
-		window.DrawImageFile("rsc/hero right.png", s.playerX, playerY)
+		window.DrawImageFile(file("hero right.png"), s.playerX, playerY)
 	}
 	// zombie
-	window.DrawImageFile("rsc/zombie left.png", windowW-200, playerY)
+	window.DrawImageFile(file("zombie left.png"), windowW-200, playerY)
 	// assigment
 	const mathScale = 2
 	w, h := window.GetScaledTextSize(s.assignment.question, mathScale)
