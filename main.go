@@ -19,10 +19,11 @@ type state interface {
 
 // all game states
 var (
-	loading = &loadingState{}
-	menu    = &menuState{}
-	playing = &playingState{}
-	dead    = &deadState{}
+	loading      = &loadingState{}
+	menu         = &menuState{}
+	playing      = &playingState{}
+	dead         = &deadState{}
+	instructions = &instructionsState{}
 )
 
 func main() {

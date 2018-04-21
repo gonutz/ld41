@@ -8,9 +8,9 @@ type menuState struct {
 }
 
 func (s *menuState) enter(state) {
-	s.hotItem = 0
 	s.items = []string{
 		"Start Game",
+		"How to Play",
 		"High Scores",
 		"Quit",
 	}
@@ -38,8 +38,10 @@ func (s *menuState) update(window draw.Window) state {
 		case 0:
 			nextState = playing
 		case 1:
-			nextState = dead
+			nextState = instructions
 		case 2:
+			nextState = dead
+		case 3:
 			window.Close()
 		}
 	}

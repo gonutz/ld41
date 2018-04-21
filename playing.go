@@ -69,9 +69,7 @@ var fireKeys = [10][2]draw.Key{
 func (s *playingState) update(window draw.Window) state {
 	// handle input
 	if window.WasKeyPressed(draw.KeyEscape) {
-		// TODO eventually go to a pause menu here and when we come back,
-		// generate a new assignment! no cheating! :-)
-		window.Close()
+		return menu
 	}
 	// shoot or miss
 	s.shootBan--
