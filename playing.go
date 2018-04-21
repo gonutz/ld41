@@ -23,7 +23,8 @@ type playingState struct {
 	bullets          []bullet
 	zombies          []zombie
 	numbers          []fadingNumber
-	nextZombie       int
+	nextZombie       int // time until next zombie spawns
+	shootBan         int // time until shooting is allowed after wrong number
 }
 
 func (s *playingState) enter(state) {
@@ -59,22 +60,29 @@ func (s *playingState) update(window draw.Window) state {
 		window.Close()
 	}
 	// shoot or miss
-	wrongNumber := false
-	for n, keys := range fireKeys {
-		if window.WasKeyPressed(keys[0]) || window.WasKeyPressed(keys[1]) {
-			if n != s.assignment.answer {
-				wrongNumber = true
-				s.addFadingNumber(n, draw.Red)
-				break
+	s.shootBan--
+	if s.shootBan < 0 {
+		s.shootBan = 0
+	}
+	if s.shootBan <= 0 {
+		wrongNumber := false
+		for n, keys := range fireKeys {
+			if window.WasKeyPressed(keys[0]) || window.WasKeyPressed(keys[1]) {
+				if n != s.assignment.answer {
+					wrongNumber = true
+					s.addFadingNumber(n, draw.Red)
+					s.shootBan = frames(500 * time.Millisecond)
+					break
+				}
 			}
 		}
-	}
-	if !wrongNumber {
-		keys := fireKeys[s.assignment.answer]
-		if window.WasKeyPressed(keys[0]) || window.WasKeyPressed(keys[1]) {
-			// add the number before shooting, shooting generates a new one
-			s.addFadingNumber(s.assignment.answer, draw.Green)
-			s.shoot(window)
+		if !wrongNumber {
+			keys := fireKeys[s.assignment.answer]
+			if window.WasKeyPressed(keys[0]) || window.WasKeyPressed(keys[1]) {
+				// add the number before shooting, shooting generates a new one
+				s.addFadingNumber(s.assignment.answer, draw.Green)
+				s.shoot(window)
+			}
 		}
 	}
 	// move left/right
