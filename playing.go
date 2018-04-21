@@ -27,7 +27,7 @@ type playingState struct {
 }
 
 func (s *playingState) enter(state) {
-	s.playerX = windowW / 3
+	s.playerX = (windowW - playerW) / 2
 	s.playerY = windowH - playerH - 100
 	s.generator = mathGenerator{
 		ops: []mathOp{add, subtract, add, subtract, multiply, divide},
@@ -159,8 +159,26 @@ func (s *playingState) update(window draw.Window) state {
 	}
 
 	// render
+	// background
+	{
+		const h = 3
+		for y := 0; y < windowH; y += h {
+			window.FillRect(0, y, windowW, h, draw.RGB(0, 0, float32(y+50)/windowH))
+		}
+		const groundH = 170
+		groundCenter := draw.RGB(135/255.0, 33/255.0, 2/255.0)
+		groundEdge := draw.RGB(95/255.0, 23/255.0, 1/255.0)
+		for y := windowH - groundH; y < windowH; y += h {
+			centerWeight := 1.0 - float32(abs(y-(windowH-groundH/2)))/80.0
+			color := draw.RGB(
+				groundCenter.R*centerWeight+groundEdge.R*(1-centerWeight),
+				groundCenter.G*centerWeight+groundEdge.G*(1-centerWeight),
+				groundCenter.B*centerWeight+groundEdge.B*(1-centerWeight),
+			)
+			window.FillRect(0, y, windowW, h, color)
+		}
+	}
 	// player
-	window.FillRect(0, 0, windowW, windowH, draw.RGB(0, 0.5, 1))
 	if s.playerFacingLeft {
 		window.DrawImageFile(file("hero left.png"), s.playerX, s.playerY)
 	} else {
@@ -188,7 +206,7 @@ func (s *playingState) update(window draw.Window) state {
 		color := num.color
 		color.A = num.life
 		w, _ := window.GetScaledTextSize(num.text, scale)
-		window.DrawScaledText(num.text, (windowW-w)/2, 0, scale, color)
+		window.DrawScaledText(num.text, (windowW-w)/2, 50, scale, color)
 	}
 	// assigment
 	const mathScale = 2
@@ -196,7 +214,7 @@ func (s *playingState) update(window draw.Window) state {
 	window.DrawScaledText(
 		s.assignment.question,
 		s.playerX+(playerW-w)/2,
-		s.playerY-h,
+		s.playerY-2*h,
 		mathScale,
 		draw.White,
 	)
