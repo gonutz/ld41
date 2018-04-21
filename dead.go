@@ -1,7 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"github.com/gonutz/prototype/draw"
+	"math/rand"
+	"sort"
 	"time"
 )
 
@@ -10,15 +13,30 @@ type deadState struct {
 	restartVisible bool
 }
 
-func (s *deadState) enter(state) {
+func (s *deadState) enter(oldState state) {
 	s.restartVisible = true
 	s.blink = 0
+	if oldState == playing {
+		score := playing.score
+		highscores := loadHighScores()
+		highscores = append(highscores, highscore{
+			score: score,
+			// TODO enter name here
+			name: fmt.Sprintf("name %d", rand.Intn(10000)),
+		})
+		sort.Stable(byScore(highscores))
+		const maxScores = 5
+		if len(highscores) > maxScores {
+			highscores = highscores[:maxScores]
+		}
+		saveHighScores(highscores)
+	}
 }
 
 func (*deadState) leave() {}
 
 func (s *deadState) update(window draw.Window) state {
-	nextState := dead
+	var nextState state = dead
 	if window.WasKeyPressed(draw.KeyEnter) || window.WasKeyPressed(draw.KeyNumEnter) {
 		nextState = playing
 	}

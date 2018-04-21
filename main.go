@@ -19,15 +19,15 @@ type state interface {
 
 // all game states
 var (
-	loading state = &loadingState{}
-	playing state = &playingState{}
-	dead    state = &deadState{}
+	loading = &loadingState{}
+	playing = &playingState{}
+	dead    = &deadState{}
 )
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
 
-	state := loading
+	var state state = loading
 	state.enter(nil)
 
 	defer cleanUpAssets()
