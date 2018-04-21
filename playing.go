@@ -10,6 +10,7 @@ const (
 	playerW, playerH   = 158, 207
 	bulletShootOffsetY = 103
 	bulletW, bulletH   = 27, 9
+	zombieW, zombieH   = 116, 218
 )
 
 type playingState struct {
@@ -18,16 +19,22 @@ type playingState struct {
 	generator        mathGenerator
 	assignment       assignment
 	bullets          []bullet
+	zombies          []zombie
 }
 
 func (s *playingState) enter(state) {
-	s.playerX = windowW / 4
+	s.playerX = windowW / 3
 	s.playerY = 250
 	s.generator = mathGenerator{
 		ops: []mathOp{add, subtract, add, subtract, multiply, divide},
 		max: 9,
 	}
 	s.assignment = s.generator.generate(rand.Int)
+	s.zombies = []zombie{
+		zombie{x: windowW - 200, y: s.playerY, facingLeft: true},
+		zombie{x: windowW - 100, y: s.playerY - 2, facingLeft: true},
+		zombie{x: 50, y: s.playerY, facingLeft: false},
+	}
 }
 
 func (*playingState) leave() {}
@@ -68,8 +75,36 @@ func (s *playingState) update(window draw.Window) state {
 	n := 0
 	for i := range s.bullets {
 		b := &s.bullets[i]
+		bulletHitbox := rectangle{
+			x: b.x,
+			y: b.y,
+			w: bulletW + abs(b.dx),
+			h: bulletH,
+		}
+		if b.dx < 0 {
+			bulletHitbox.x += b.dx
+		}
 		b.x += b.dx
-		if (-100 <= b.x) && (b.x <= windowW+100) {
+		victimIndex := -1
+		for i, z := range s.zombies {
+			hitbox := rectangle{
+				x: z.x + zombieW/4,
+				y: z.y,
+				w: zombieW / 2,
+				h: zombieH,
+			}
+			if overlap(bulletHitbox, hitbox) {
+				if victimIndex == -1 ||
+					(b.dx > 0 && z.x < s.zombies[victimIndex].x) ||
+					(b.dx < 0 && z.x > s.zombies[victimIndex].x) {
+					victimIndex = i
+				}
+			}
+		}
+		if victimIndex != -1 {
+			s.killZombie(victimIndex)
+		}
+		if victimIndex == -1 && (-100 <= b.x) && (b.x <= windowW+100) {
 			s.bullets[n] = *b
 			n++
 		}
@@ -84,8 +119,14 @@ func (s *playingState) update(window draw.Window) state {
 	} else {
 		window.DrawImageFile(file("hero right.png"), s.playerX, s.playerY)
 	}
-	// zombie
-	window.DrawImageFile(file("zombie left.png"), windowW-200, s.playerY)
+	// zombies
+	for _, z := range s.zombies {
+		img := "zombie right.png"
+		if z.facingLeft {
+			img = "zombie left.png"
+		}
+		window.DrawImageFile(file(img), z.x, z.y)
+	}
 	// bullets
 	for _, b := range s.bullets {
 		img := "bullet left.png"
@@ -124,7 +165,17 @@ func (s *playingState) shoot(window draw.Window) {
 	s.assignment = s.generator.generate(rand.Int)
 }
 
+func (s *playingState) killZombie(i int) {
+	copy(s.zombies[i:], s.zombies[i+1:])
+	s.zombies = s.zombies[:len(s.zombies)-1]
+}
+
 type bullet struct {
 	x, y int
 	dx   int
+}
+
+type zombie struct {
+	x, y       int
+	facingLeft bool
 }
