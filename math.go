@@ -5,6 +5,13 @@ import (
 	"time"
 )
 
+func round(x float32) int {
+	if x >= 0 {
+		return int(x + 0.5)
+	}
+	return int(x - 0.5)
+}
+
 func abs(x int) int {
 	if x < 0 {
 		return -x

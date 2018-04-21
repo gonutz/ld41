@@ -14,6 +14,9 @@ const (
 	bulletW, bulletH     = 27, 9
 	zombieW, zombieH     = 116, 218
 	deadHeadW, deadHeadH = 87, 103
+	zombieSpawnReduction = 0.97
+	zombieSpawnMin       = 1000 * time.Millisecond
+	zombieSpawnMax       = 2000 * time.Millisecond
 )
 
 type playingState struct {
@@ -28,7 +31,7 @@ type playingState struct {
 	shootBan         int // time until shooting is allowed after wrong number
 	score            int
 	zombieSpawnDelay struct {
-		minFrames, maxFrames int
+		minFrames, maxFrames float32
 	}
 }
 
@@ -44,8 +47,8 @@ func (s *playingState) enter(state) {
 	s.bullets = nil
 	s.zombies = nil
 	s.numbers = nil
-	s.zombieSpawnDelay.minFrames = frames(1200 * time.Millisecond)
-	s.zombieSpawnDelay.maxFrames = frames(2400 * time.Millisecond)
+	s.zombieSpawnDelay.minFrames = float32(frames(zombieSpawnMin))
+	s.zombieSpawnDelay.maxFrames = float32(frames(zombieSpawnMax))
 	s.newZombie()
 	s.shootBan = 0
 	s.score = 0
@@ -275,11 +278,10 @@ func (s *playingState) killZombie(i int) {
 	copy(s.zombies[i:], s.zombies[i+1:])
 	s.zombies = s.zombies[:len(s.zombies)-1]
 	s.score++
-	const reduction = 0.95
 	min, max := s.zombieSpawnDelay.minFrames, s.zombieSpawnDelay.maxFrames
-	s.zombieSpawnDelay.minFrames = int(float32(min) * reduction)
+	s.zombieSpawnDelay.minFrames = min * zombieSpawnReduction
 	if s.score%2 == 1 {
-		s.zombieSpawnDelay.maxFrames = int(float32(max) * reduction)
+		s.zombieSpawnDelay.maxFrames = max * zombieSpawnReduction
 	}
 }
 
@@ -301,7 +303,8 @@ func (s *playingState) newZombie() {
 		z.x = -zombieW
 	}
 	s.zombies = append(s.zombies, z)
-	min, max := s.zombieSpawnDelay.minFrames, s.zombieSpawnDelay.maxFrames
+	min := round(s.zombieSpawnDelay.minFrames)
+	max := round(s.zombieSpawnDelay.maxFrames)
 	s.nextZombie = min + rand.Intn(max-min)
 }
 
