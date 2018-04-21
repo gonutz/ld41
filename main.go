@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	windowTitle      = "Shootematics"
+	windowTitle      = "No-Brain Jogging"
 	windowW, windowH = 1000, 600
 )
 
