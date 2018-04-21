@@ -3,47 +3,91 @@ package main
 import (
 	"fmt"
 	"github.com/gonutz/prototype/draw"
-	"math/rand"
 	"sort"
+	"strings"
 	"time"
+	"unicode/utf8"
+)
+
+const (
+	maxNameLen      = 20
+	cursorBlinkTime = 300 * time.Millisecond
 )
 
 type deadState struct {
 	blink          int
 	restartVisible bool
+	highscores     []highscore
+	editing        int
+	cursorBlink    int
+	cursorVisible  bool
 }
 
 func (s *deadState) enter(oldState state) {
 	s.restartVisible = true
 	s.blink = 0
+	s.editing = -1
+	s.highscores = loadHighScores()
 	if oldState == playing {
 		score := playing.score
-		highscores := loadHighScores()
-		highscores = append(highscores, highscore{
+		s.highscores = append(s.highscores, highscore{
 			score: score,
-			// TODO enter name here
-			name: fmt.Sprintf("name %d", rand.Intn(10000)),
+			name:  "",
+			id:    1,
 		})
-		sort.Stable(byScore(highscores))
+		sort.Stable(byScore(s.highscores))
 		const maxScores = 5
-		if len(highscores) > maxScores {
-			highscores = highscores[:maxScores]
+		if len(s.highscores) > maxScores {
+			s.highscores = s.highscores[:maxScores]
 		}
-		saveHighScores(highscores)
+		saveHighScores(s.highscores)
+		s.editing = -1
+		for i := range s.highscores {
+			if s.highscores[i].id == 1 {
+				s.editing = i
+			}
+		}
 	}
+	s.restartVisible = false
+	s.cursorBlink = 0
+	s.cursorVisible = false
 }
 
 func (*deadState) leave() {}
 
 func (s *deadState) update(window draw.Window) state {
 	var nextState state = dead
-	if window.WasKeyPressed(draw.KeyEnter) || window.WasKeyPressed(draw.KeyNumEnter) {
-		nextState = playing
-	}
+	// handle input
 	if window.WasKeyPressed(draw.KeyEscape) {
 		window.Close()
 	}
-
+	if window.WasKeyPressed(draw.KeyEnter) || window.WasKeyPressed(draw.KeyNumEnter) {
+		if s.editing != -1 {
+			s.editing = -1
+			saveHighScores(s.highscores)
+		} else {
+			nextState = playing
+		}
+	}
+	// text input if editing high score name
+	if s.editing != -1 {
+		score := &s.highscores[s.editing]
+		typed := window.Characters()
+		for _, r := range typed {
+			if len(score.name) < maxNameLen && (32 <= r) && (r <= 126) {
+				score.name += string(r)
+			}
+			s.cursorVisible = true
+			s.cursorBlink = frames(cursorBlinkTime)
+		}
+		if window.WasKeyPressed(draw.KeyBackspace) && score.name != "" {
+			_, size := utf8.DecodeLastRuneInString(score.name)
+			score.name = score.name[:len(score.name)-size]
+			s.cursorVisible = true
+			s.cursorBlink = frames(cursorBlinkTime)
+		}
+	}
+	// update animations
 	s.blink--
 	if s.blink <= 0 {
 		s.restartVisible = !s.restartVisible
@@ -53,17 +97,42 @@ func (s *deadState) update(window draw.Window) state {
 			s.blink = frames(400 * time.Millisecond)
 		}
 	}
-
+	s.cursorBlink--
+	if s.cursorBlink < 0 {
+		s.cursorVisible = !s.cursorVisible
+		s.cursorBlink = frames(cursorBlinkTime)
+	}
+	// render
+	// highscores
+	const scoreScale = 2
+	_, lineH := window.GetScaledTextSize("A", scoreScale)
+	scoresY := (windowH - 5*lineH) / 2
+	for i, score := range s.highscores {
+		name := score.name
+		if i == s.editing && s.cursorVisible {
+			name += "|"
+		}
+		if len(name) < maxNameLen {
+			name += strings.Repeat(".", maxNameLen-len(name))
+		}
+		space := " "
+		if len(name) > maxNameLen {
+			space = ""
+		}
+		scoreText := fmt.Sprintf("%d. %s%s%d", i+1, name, space, score.score)
+		window.DrawScaledText(scoreText, windowW/4, scoresY+i*lineH, scoreScale, draw.White)
+	}
+	// title and instructions
 	const (
 		title     = "You were eaten alive!"
 		msg       = "Press ENTER to restart"
 		textScale = 3
 	)
 	w, h := window.GetScaledTextSize(title, textScale)
-	window.DrawScaledText(title, (windowW-w)/2, windowH/2-h, textScale, draw.White)
-	if s.restartVisible {
-		w, h := window.GetScaledTextSize(msg, textScale)
-		window.DrawScaledText(msg, (windowW-w)/2, windowH/2+h, textScale, draw.White)
+	window.DrawScaledText(title, (windowW-w)/2, scoresY-h-50, textScale, draw.White)
+	if s.editing == -1 && s.restartVisible {
+		w, _ := window.GetScaledTextSize(msg, textScale)
+		window.DrawScaledText(msg, (windowW-w)/2, scoresY+5*lineH+50, textScale, draw.White)
 	}
 	return nextState
 }

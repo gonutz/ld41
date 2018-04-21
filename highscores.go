@@ -11,6 +11,7 @@ import (
 type highscore struct {
 	score int
 	name  string
+	id    int // id is used only temporarily in the code, do not save/load it
 }
 
 type byScore []highscore
