@@ -6,19 +6,23 @@ import (
 )
 
 const (
-	playerSpeed      = 4
-	playerW, playerH = 158, 207
+	playerSpeed        = 4
+	playerW, playerH   = 158, 207
+	bulletShootOffsetY = 103
+	bulletW, bulletH   = 27, 9
 )
 
 type playingState struct {
-	playerX          int
+	playerX, playerY int
 	playerFacingLeft bool
 	generator        mathGenerator
 	assignment       assignment
+	bullets          []bullet
 }
 
 func (s *playingState) enter(state) {
 	s.playerX = windowW / 4
+	s.playerY = 250
 	s.generator = mathGenerator{
 		ops: []mathOp{add, subtract, add, subtract, multiply, divide},
 		max: 9,
@@ -49,7 +53,7 @@ func (s *playingState) update(window draw.Window) state {
 	}
 	keys := fireKeys[s.assignment.answer]
 	if window.WasKeyPressed(keys[0]) || window.WasKeyPressed(keys[1]) {
-		s.assignment = s.generator.generate(rand.Int)
+		s.shoot(window)
 	}
 	if window.IsKeyDown(draw.KeyLeft) || window.IsKeyDown(draw.KeyA) {
 		s.playerX -= playerSpeed
@@ -60,27 +64,67 @@ func (s *playingState) update(window draw.Window) state {
 		s.playerFacingLeft = false
 	}
 
+	// update world
+	n := 0
+	for i := range s.bullets {
+		b := &s.bullets[i]
+		b.x += b.dx
+		if (-100 <= b.x) && (b.x <= windowW+100) {
+			s.bullets[n] = *b
+			n++
+		}
+	}
+	s.bullets = s.bullets[:n]
+
 	// render
 	// player
-	const playerY = 250
 	window.FillRect(0, 0, windowW, windowH, draw.RGB(0, 0.5, 1))
 	if s.playerFacingLeft {
-		window.DrawImageFile(file("hero left.png"), s.playerX, playerY)
+		window.DrawImageFile(file("hero left.png"), s.playerX, s.playerY)
 	} else {
-		window.DrawImageFile(file("hero right.png"), s.playerX, playerY)
+		window.DrawImageFile(file("hero right.png"), s.playerX, s.playerY)
 	}
 	// zombie
-	window.DrawImageFile(file("zombie left.png"), windowW-200, playerY)
+	window.DrawImageFile(file("zombie left.png"), windowW-200, s.playerY)
+	// bullets
+	for _, b := range s.bullets {
+		img := "bullet left.png"
+		if b.dx > 0 {
+			img = "bullet right.png"
+		}
+		window.DrawImageFile(file(img), b.x, b.y)
+	}
 	// assigment
 	const mathScale = 2
 	w, h := window.GetScaledTextSize(s.assignment.question, mathScale)
 	window.DrawScaledText(
 		s.assignment.question,
 		s.playerX+(playerW-w)/2,
-		playerY-h,
+		s.playerY-h,
 		mathScale,
 		draw.White,
 	)
 
 	return playing
+}
+
+func (s *playingState) shoot(window draw.Window) {
+	window.PlaySoundFile(file("shot.wav"))
+	const bulletSpeed = 20
+	var b bullet
+	b.y = s.playerY + bulletShootOffsetY
+	if s.playerFacingLeft {
+		b.x = s.playerX
+		b.dx = -bulletSpeed
+	} else {
+		b.x = s.playerX + playerW - bulletW
+		b.dx = bulletSpeed
+	}
+	s.bullets = append(s.bullets, b)
+	s.assignment = s.generator.generate(rand.Int)
+}
+
+type bullet struct {
+	x, y int
+	dx   int
 }
