@@ -20,9 +20,10 @@ func (x byScore) Len() int           { return len(x) }
 func (x byScore) Less(i, j int) bool { return x[i].score > x[j].score }
 func (x byScore) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
 
+var highscorePath = filepath.Join(dataFolder, "ld41.high")
+
 func loadHighScores() []highscore {
-	path := filepath.Join(dataFolder, "ld41")
-	data, err := ioutil.ReadFile(path)
+	data, err := ioutil.ReadFile(highscorePath)
 	if err != nil {
 		return nil
 	}
@@ -49,10 +50,9 @@ func loadHighScores() []highscore {
 }
 
 func saveHighScores(scores []highscore) {
-	path := filepath.Join(dataFolder, "ld41")
 	var lines []string
 	for _, s := range scores {
 		lines = append(lines, fmt.Sprintf("%d %s", s.score, s.name))
 	}
-	ioutil.WriteFile(path, []byte(strings.Join(lines, "\n")), 0666)
+	ioutil.WriteFile(highscorePath, []byte(strings.Join(lines, "\n")), 0666)
 }
