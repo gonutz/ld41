@@ -9,7 +9,7 @@ import (
 
 const (
 	playerSpeed        = 4
-	playerW, playerH   = 158, 207
+	playerW, playerH   = 172, 207
 	bulletShootOffsetY = 103
 	bulletW, bulletH   = 27, 9
 	zombieW, zombieH   = 116, 218
