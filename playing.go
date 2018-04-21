@@ -1,14 +1,13 @@
 package main
 
 import (
-	"fmt"
 	"github.com/gonutz/prototype/draw"
 	"math/rand"
 )
 
 const (
 	playerSpeed      = 4
-	playerW, playerH = 93, 209
+	playerW, playerH = 158, 207
 )
 
 type playingState struct {
@@ -77,12 +76,11 @@ func (s *playingState) update(window draw.Window) state {
 	w, h := window.GetScaledTextSize(s.assignment.question, mathScale)
 	window.DrawScaledText(
 		s.assignment.question,
-		s.playerX+playerW/2-w/2,
+		s.playerX+(playerW-w)/2,
 		playerY-h,
 		mathScale,
 		draw.White,
 	)
-	window.DrawScaledText(fmt.Sprintf("= %d", s.assignment.answer), 0, 0, mathScale, draw.White)
 
 	return playing
 }
