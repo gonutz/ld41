@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	title            = "LD41 - TODO: name this game"
+	title            = "Shootematics"
 	windowW, windowH = 1000, 600
 )
 
