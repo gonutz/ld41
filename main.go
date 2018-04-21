@@ -1,6 +1,10 @@
 package main
 
-import "github.com/gonutz/prototype/draw"
+import (
+	"github.com/gonutz/prototype/draw"
+	"math/rand"
+	"time"
+)
 
 const (
 	title            = "LD41 - TODO: name this game"
@@ -19,6 +23,7 @@ var (
 )
 
 func main() {
+	rand.Seed(time.Now().UnixNano())
 	state := playing
 	state.enter(nil)
 	check(draw.RunWindow(title, windowW, windowH, func(window draw.Window) {
