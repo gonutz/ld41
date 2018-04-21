@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/gonutz/prototype/draw"
 	"math/rand"
+	"time"
 )
 
 const (
@@ -22,21 +23,18 @@ type playingState struct {
 	bullets          []bullet
 	zombies          []zombie
 	numbers          []fadingNumber
+	nextZombie       int
 }
 
 func (s *playingState) enter(state) {
 	s.playerX = windowW / 3
-	s.playerY = 250
+	s.playerY = windowH - playerH - 100
 	s.generator = mathGenerator{
 		ops: []mathOp{add, subtract, add, subtract, multiply, divide},
 		max: 9,
 	}
 	s.assignment = s.generator.generate(rand.Int)
-	s.zombies = []zombie{
-		zombie{x: windowW - 200, y: s.playerY, facingLeft: true},
-		zombie{x: windowW - 100, y: s.playerY - 2, facingLeft: true},
-		zombie{x: 50, y: s.playerY, facingLeft: false},
-	}
+	s.newZombie()
 }
 
 func (*playingState) leave() {}
@@ -82,10 +80,16 @@ func (s *playingState) update(window draw.Window) state {
 	// move left/right
 	if window.IsKeyDown(draw.KeyLeft) || window.IsKeyDown(draw.KeyA) {
 		s.playerX -= playerSpeed
+		if s.playerX < 100 {
+			s.playerX = 100
+		}
 		s.playerFacingLeft = true
 	}
 	if window.IsKeyDown(draw.KeyRight) || window.IsKeyDown(draw.KeyD) {
 		s.playerX += playerSpeed
+		if s.playerX+playerW > windowW-100 {
+			s.playerX = windowW - 100 - playerW
+		}
 		s.playerFacingLeft = false
 	}
 
@@ -140,6 +144,19 @@ func (s *playingState) update(window draw.Window) state {
 		}
 	}
 	s.numbers = s.numbers[:n]
+	// update zombies
+	s.nextZombie--
+	if s.nextZombie <= 0 {
+		s.newZombie()
+	}
+	for i := range s.zombies {
+		z := &s.zombies[i]
+		if z.facingLeft {
+			z.x -= 2
+		} else {
+			z.x += 2
+		}
+	}
 
 	// render
 	// player
@@ -214,6 +231,20 @@ func (s *playingState) addFadingNumber(n int, color draw.Color) {
 		life:  1.0,
 		color: color,
 	})
+}
+
+func (s *playingState) newZombie() {
+	var z zombie
+	z.facingLeft = rand.Intn(2) == 0
+	z.y = s.playerY + playerH - zombieH - 10 + rand.Intn(30)
+	if z.facingLeft {
+		z.x = windowW
+	} else {
+		z.x = -zombieW
+	}
+	s.zombies = append(s.zombies, z)
+	s.nextZombie = frames(600*time.Millisecond) +
+		frames(time.Duration(rand.Intn(600))*time.Millisecond)
 }
 
 type fadingNumber struct {
