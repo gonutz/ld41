@@ -27,6 +27,9 @@ type playingState struct {
 	nextZombie       int // time until next zombie spawns
 	shootBan         int // time until shooting is allowed after wrong number
 	score            int
+	zombieSpawnDelay struct {
+		minFrames, maxFrames int
+	}
 }
 
 func (s *playingState) enter(state) {
@@ -41,6 +44,8 @@ func (s *playingState) enter(state) {
 	s.bullets = nil
 	s.zombies = nil
 	s.numbers = nil
+	s.zombieSpawnDelay.minFrames = frames(1200 * time.Millisecond)
+	s.zombieSpawnDelay.maxFrames = frames(2400 * time.Millisecond)
 	s.newZombie()
 	s.shootBan = 0
 	s.score = 0
@@ -272,6 +277,12 @@ func (s *playingState) killZombie(i int) {
 	copy(s.zombies[i:], s.zombies[i+1:])
 	s.zombies = s.zombies[:len(s.zombies)-1]
 	s.score++
+	const reduction = 0.95
+	min, max := s.zombieSpawnDelay.minFrames, s.zombieSpawnDelay.maxFrames
+	s.zombieSpawnDelay.minFrames = int(float32(min) * reduction)
+	if s.score%2 == 1 {
+		s.zombieSpawnDelay.maxFrames = int(float32(max) * reduction)
+	}
 }
 
 func (s *playingState) addFadingNumber(n int, color draw.Color) {
@@ -292,8 +303,8 @@ func (s *playingState) newZombie() {
 		z.x = -zombieW
 	}
 	s.zombies = append(s.zombies, z)
-	s.nextZombie = frames(600*time.Millisecond) +
-		frames(time.Duration(rand.Intn(600))*time.Millisecond)
+	min, max := s.zombieSpawnDelay.minFrames, s.zombieSpawnDelay.maxFrames
+	s.nextZombie = min + rand.Intn(max-min)
 }
 
 type fadingNumber struct {
