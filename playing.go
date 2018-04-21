@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/gonutz/prototype/draw"
 	"math/rand"
 )
@@ -20,6 +21,7 @@ type playingState struct {
 	assignment       assignment
 	bullets          []bullet
 	zombies          []zombie
+	numbers          []fadingNumber
 }
 
 func (s *playingState) enter(state) {
@@ -58,10 +60,26 @@ func (s *playingState) update(window draw.Window) state {
 		// TODO eventually go to a pause menu here
 		window.Close()
 	}
-	keys := fireKeys[s.assignment.answer]
-	if window.WasKeyPressed(keys[0]) || window.WasKeyPressed(keys[1]) {
-		s.shoot(window)
+	// shoot or miss
+	wrongNumber := false
+	for n, keys := range fireKeys {
+		if window.WasKeyPressed(keys[0]) || window.WasKeyPressed(keys[1]) {
+			if n != s.assignment.answer {
+				wrongNumber = true
+				s.addFadingNumber(n, draw.Red)
+				break
+			}
+		}
 	}
+	if !wrongNumber {
+		keys := fireKeys[s.assignment.answer]
+		if window.WasKeyPressed(keys[0]) || window.WasKeyPressed(keys[1]) {
+			// add the number before shooting, shooting generates a new one
+			s.addFadingNumber(s.assignment.answer, draw.Green)
+			s.shoot(window)
+		}
+	}
+	// move left/right
 	if window.IsKeyDown(draw.KeyLeft) || window.IsKeyDown(draw.KeyA) {
 		s.playerX -= playerSpeed
 		s.playerFacingLeft = true
@@ -72,6 +90,7 @@ func (s *playingState) update(window draw.Window) state {
 	}
 
 	// update world
+	// shoot bullets
 	n := 0
 	for i := range s.bullets {
 		b := &s.bullets[i]
@@ -110,6 +129,17 @@ func (s *playingState) update(window draw.Window) state {
 		}
 	}
 	s.bullets = s.bullets[:n]
+	// update fading numbers
+	n = 0
+	for i := range s.numbers {
+		num := &s.numbers[i]
+		num.life -= 0.02
+		if num.life > 0 {
+			s.numbers[n] = *num
+			n++
+		}
+	}
+	s.numbers = s.numbers[:n]
 
 	// render
 	// player
@@ -135,6 +165,14 @@ func (s *playingState) update(window draw.Window) state {
 		}
 		window.DrawImageFile(file(img), b.x, b.y)
 	}
+	// fading numbers from the past
+	for _, num := range s.numbers {
+		scale := 3 + 6*(1-num.life)
+		color := num.color
+		color.A = num.life
+		w, _ := window.GetScaledTextSize(num.text, scale)
+		window.DrawScaledText(num.text, (windowW-w)/2, 0, scale, color)
+	}
 	// assigment
 	const mathScale = 2
 	w, h := window.GetScaledTextSize(s.assignment.question, mathScale)
@@ -151,7 +189,7 @@ func (s *playingState) update(window draw.Window) state {
 
 func (s *playingState) shoot(window draw.Window) {
 	window.PlaySoundFile(file("shot.wav"))
-	const bulletSpeed = 20
+	const bulletSpeed = 30
 	var b bullet
 	b.y = s.playerY + bulletShootOffsetY
 	if s.playerFacingLeft {
@@ -168,6 +206,20 @@ func (s *playingState) shoot(window draw.Window) {
 func (s *playingState) killZombie(i int) {
 	copy(s.zombies[i:], s.zombies[i+1:])
 	s.zombies = s.zombies[:len(s.zombies)-1]
+}
+
+func (s *playingState) addFadingNumber(n int, color draw.Color) {
+	s.numbers = append(s.numbers, fadingNumber{
+		text:  fmt.Sprintf("%d", n),
+		life:  1.0,
+		color: color,
+	})
+}
+
+type fadingNumber struct {
+	text  string
+	life  float32
+	color draw.Color
 }
 
 type bullet struct {
