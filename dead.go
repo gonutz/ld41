@@ -10,11 +10,13 @@ import (
 )
 
 const (
+	maxHighScores   = 5
 	maxNameLen      = 20
 	cursorBlinkTime = 300 * time.Millisecond
 )
 
 type deadState struct {
+	caption        string
 	blink          int
 	restartVisible bool
 	highscores     []highscore
@@ -28,7 +30,12 @@ func (s *deadState) enter(oldState state) {
 	s.blink = 0
 	s.editing = -1
 	s.highscores = loadHighScores()
+	if len(s.highscores) < maxHighScores {
+		s.highscores = append(s.highscores, make([]highscore, maxHighScores-len(s.highscores))...)
+	}
+	s.caption = "High Scores"
 	if oldState == playing {
+		s.caption = "You were eaten alive!"
 		score := playing.score
 		s.highscores = append(s.highscores, highscore{
 			score: score,
@@ -36,9 +43,8 @@ func (s *deadState) enter(oldState state) {
 			id:    1,
 		})
 		sort.Stable(byScore(s.highscores))
-		const maxScores = 5
-		if len(s.highscores) > maxScores {
-			s.highscores = s.highscores[:maxScores]
+		if len(s.highscores) > maxHighScores {
+			s.highscores = s.highscores[:maxHighScores]
 		}
 		saveHighScores(s.highscores)
 		s.editing = -1
@@ -59,12 +65,14 @@ func (s *deadState) update(window draw.Window) state {
 	var nextState state = dead
 	// handle input
 	if window.WasKeyPressed(draw.KeyEscape) {
-		window.Close()
+		nextState = menu
 	}
 	if window.WasKeyPressed(draw.KeyEnter) || window.WasKeyPressed(draw.KeyNumEnter) {
 		if s.editing != -1 {
 			s.editing = -1
 			saveHighScores(s.highscores)
+			s.restartVisible = false
+			s.blink = 0
 		} else {
 			nextState = playing
 		}
@@ -124,12 +132,11 @@ func (s *deadState) update(window draw.Window) state {
 	}
 	// title and instructions
 	const (
-		title     = "You were eaten alive!"
 		msg       = "Press ENTER to restart"
 		textScale = 3
 	)
-	w, h := window.GetScaledTextSize(title, textScale)
-	window.DrawScaledText(title, (windowW-w)/2, scoresY-h-50, textScale, draw.White)
+	w, h := window.GetScaledTextSize(s.caption, textScale)
+	window.DrawScaledText(s.caption, (windowW-w)/2, scoresY-h-50, textScale, draw.White)
 	if s.editing == -1 && s.restartVisible {
 		w, _ := window.GetScaledTextSize(msg, textScale)
 		window.DrawScaledText(msg, (windowW-w)/2, scoresY+5*lineH+50, textScale, draw.White)

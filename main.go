@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	title            = "Shootematics"
+	windowTitle      = "Shootematics"
 	windowW, windowH = 1000, 600
 )
 
@@ -20,6 +20,7 @@ type state interface {
 // all game states
 var (
 	loading = &loadingState{}
+	menu    = &menuState{}
 	playing = &playingState{}
 	dead    = &deadState{}
 )
@@ -32,7 +33,7 @@ func main() {
 
 	defer cleanUpAssets()
 
-	check(draw.RunWindow(title, windowW, windowH, func(window draw.Window) {
+	check(draw.RunWindow(windowTitle, windowW, windowH, func(window draw.Window) {
 		newState := state.update(window)
 		if state != newState {
 			state.leave()

@@ -60,7 +60,7 @@ func (s *loadingState) update(window draw.Window) state {
 	w, h := window.GetScaledTextSize(text, textScale)
 	window.DrawScaledText(text, (windowW-w)/2, (windowH-h)/2, textScale, draw.White)
 	if s.assetsLoaded {
-		return playing
+		return menu
 	} else {
 		return loading
 	}
