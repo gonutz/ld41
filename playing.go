@@ -29,12 +29,13 @@ const (
 	reloading
 	waitingToReload
 	shooting
+	realizing
 	aimingAtHead
 	bleeding
 )
 
 func dying(s torsoState) bool {
-	return s >= aimingAtHead
+	return s >= realizing
 }
 
 type playingState struct {
@@ -240,7 +241,7 @@ func (s *playingState) update(window draw.Window) state {
 			}
 			const hitDist = 40
 			if abs((s.playerX+playerW/2)-(z.x+zombieW/2)) < hitDist {
-				s.torso = aimingAtHead
+				s.torso = realizing
 				s.torsoTime = frames(time.Second)
 			}
 			const zombieFrameCount = 4
@@ -283,6 +284,9 @@ func (s *playingState) update(window draw.Window) state {
 				s.torso = reloading
 				s.torsoTime = frames(250 * time.Millisecond)
 				window.PlaySoundFile(file("reload.wav"))
+			case realizing:
+				s.torso = aimingAtHead
+				s.torsoTime = frames(time.Second)
 			case aimingAtHead:
 				s.torso = bleeding
 				window.PlaySoundFile(file("shot.wav"))
