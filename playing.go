@@ -194,6 +194,12 @@ func (s *playingState) update(window draw.Window) state {
 		if abs((s.playerX+playerW/2)-(z.x+zombieW/2)) < hitDist {
 			return dead
 		}
+		const zombieFrameCount = 4
+		z.nextFrame--
+		if z.nextFrame <= 0 {
+			z.nextFrame = frames(250 * time.Millisecond)
+			z.frame = (z.frame + 1) % zombieFrameCount
+		}
 	}
 	// animations
 	if s.waitingToReload {
@@ -260,10 +266,13 @@ func (s *playingState) update(window draw.Window) state {
 	window.DrawImageFile(file(hero), s.playerX, s.playerY)
 	// zombies
 	for _, z := range s.zombies {
-		img := "zombie right.png"
+		img := "zombie "
 		if z.facingLeft {
-			img = "zombie left.png"
+			img += "left "
+		} else {
+			img += "right "
 		}
+		img += fmt.Sprintf("%d.png", z.frame)
 		window.DrawImageFile(file(img), z.x, z.y)
 	}
 	// bullets
@@ -370,4 +379,6 @@ type bullet struct {
 type zombie struct {
 	x, y       int
 	facingLeft bool
+	frame      int
+	nextFrame  int
 }
