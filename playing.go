@@ -17,11 +17,14 @@ const (
 	zombieSpawnReduction = 0.97
 	zombieSpawnMin       = 1000 * time.Millisecond
 	zombieSpawnMax       = 2000 * time.Millisecond
+	playerWalkFrames     = 4
 )
 
 type playingState struct {
 	playerX, playerY int
 	playerFacingLeft bool
+	playerWalkFrame  int
+	playerWalkTime   int
 	generator        mathGenerator
 	assignment       assignment
 	bullets          []bullet
@@ -112,20 +115,32 @@ func (s *playingState) update(window draw.Window) state {
 		}
 	}
 	// move left/right
+	walking := false
 	const margin = -50
 	if window.IsKeyDown(draw.KeyLeft) || window.IsKeyDown(draw.KeyA) {
+		walking = true
 		s.playerX -= playerSpeed
 		if s.playerX < margin {
 			s.playerX = margin
 		}
 		s.playerFacingLeft = true
-	}
-	if window.IsKeyDown(draw.KeyRight) || window.IsKeyDown(draw.KeyD) {
+	} else if window.IsKeyDown(draw.KeyRight) || window.IsKeyDown(draw.KeyD) {
+		walking = true
 		s.playerX += playerSpeed
 		if s.playerX+playerW > windowW-margin {
 			s.playerX = windowW - margin - playerW
 		}
 		s.playerFacingLeft = false
+	}
+	if walking {
+		s.playerWalkTime--
+		if s.playerWalkTime <= 0 {
+			s.playerWalkFrame = (s.playerWalkFrame + 1) % playerWalkFrames
+			s.playerWalkTime = frames(100 * time.Millisecond)
+		}
+	} else {
+		s.playerWalkFrame = 0
+		s.playerWalkTime = 0
 	}
 
 	// update world
@@ -258,19 +273,21 @@ func (s *playingState) update(window draw.Window) state {
 	if s.shooting {
 		hero += "shoot "
 	}
+	dir := "right"
 	if s.playerFacingLeft {
-		hero += "left"
-	} else {
-		hero += "right"
+		dir = "left"
 	}
+	hero += dir
 	hero += ".png"
 	window.DrawImageFile(file(hero), s.playerX, s.playerY)
 	if s.shootBan > 0 {
-		if s.playerFacingLeft {
-			window.DrawImageFile(file("hero eye blink left.png"), s.playerX, s.playerY)
-		} else {
-			window.DrawImageFile(file("hero eye blink right.png"), s.playerX, s.playerY)
-		}
+		window.DrawImageFile(file("hero eye blink "+dir+".png"), s.playerX, s.playerY)
+	}
+	if walking {
+		img := fmt.Sprintf("hero legs walk %s %d.png", dir, s.playerWalkFrame)
+		window.DrawImageFile(file(img), s.playerX, s.playerY)
+	} else {
+		window.DrawImageFile(file("hero legs stand "+dir+".png"), s.playerX, s.playerY)
 	}
 	// zombies
 	for _, z := range s.zombies {
