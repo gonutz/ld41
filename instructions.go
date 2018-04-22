@@ -24,9 +24,11 @@ func (*instructionsState) update(window draw.Window) state {
 the calculation above your
  head to shoot your rifle.
 
+ Failing delays your next
+          shot.
+
  Use the Left/Right arrow 
    keys or A/D to move.
-
 
 
    Press ENTER to play
