@@ -13,7 +13,7 @@ In this game you solve math calculations to shoot your rifle and kill some zombi
 Build Instructions
 ==================
 
-This game is written completely in [the Go programming language](https://golang.org). Download and install it [from here]().
+This game is written completely in [the Go programming language](https://golang.org). Download and install it [from here](https://golang.org/dl) and follow the instructions to set up your `GOPATH` environment variable. If you have problems with that or want to know more about it, [go here](https://github.com/golang/go/wiki/SettingGOPATH).
 
 You also need [git](https://git-scm.com/downloads) installed.
 
