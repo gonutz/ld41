@@ -116,7 +116,10 @@ func (s *deadState) update(window draw.Window) state {
 	// render
 	// highscores
 	const scoreScale = 2
-	_, lineH := window.GetScaledTextSize("A", scoreScale)
+	lineW, lineH := window.GetScaledTextSize(
+		strings.Repeat("A", maxNameLen+len("1.  25")),
+		scoreScale,
+	)
 	scoresY := (windowH - 5*lineH) / 2
 	for i, score := range s.highscores {
 		name := score.name
@@ -131,7 +134,7 @@ func (s *deadState) update(window draw.Window) state {
 			space = ""
 		}
 		scoreText := fmt.Sprintf("%d. %s%s%d", i+1, name, space, score.score)
-		window.DrawScaledText(scoreText, windowW/4, scoresY+i*lineH, scoreScale, draw.White)
+		window.DrawScaledText(scoreText, (windowW-lineW)/2, scoresY+i*lineH, scoreScale, draw.White)
 	}
 	// title and instructions
 	const (
