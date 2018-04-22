@@ -8,7 +8,7 @@ import (
 
 const (
 	windowTitle      = "No-Brain Jogging"
-	windowW, windowH = 1000, 600
+	windowW, windowH = 1200, 600
 	musicLength      = 8081 * time.Millisecond
 )
 
