@@ -35,6 +35,9 @@ func main() {
 
 	defer cleanUpAssets()
 
+	hideCursor()
+	defer showCursor()
+
 	var musicStart time.Time
 	iconWasSet := false
 
