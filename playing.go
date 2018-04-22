@@ -20,6 +20,15 @@ const (
 	playerWalkFrames     = 4
 )
 
+type torsoState int
+
+const (
+	idle torsoState = iota
+	reloading
+	waitingToReload
+	shooting
+)
+
 type playingState struct {
 	playerX, playerY int
 	playerFacingLeft bool
@@ -36,12 +45,8 @@ type playingState struct {
 	zombieSpawnDelay struct {
 		minFrames, maxFrames float32
 	}
-	reloadTime       int
-	reloading        bool
-	waitToReloadTime int
-	waitingToReload  bool
-	shootTime        int
-	shooting         bool
+	torso     torsoState
+	torsoTime int
 }
 
 func (s *playingState) enter(state) {
@@ -61,10 +66,8 @@ func (s *playingState) enter(state) {
 	s.newZombie()
 	s.shootBan = 0
 	s.score = 0
-	s.reloadTime = 0
-	s.reloading = false
-	s.shootTime = 0
-	s.shooting = false
+	s.torsoTime = 0
+	s.torso = idle
 }
 
 func (*playingState) leave() {}
@@ -218,30 +221,22 @@ func (s *playingState) update(window draw.Window) state {
 		}
 	}
 	// animations
-	if s.waitingToReload {
-		s.waitToReloadTime--
-		if s.waitToReloadTime <= 0 {
-			s.waitToReloadTime = 0
-			s.waitingToReload = false
-			s.reloadTime = frames(250 * time.Millisecond)
-			s.reloading = true
-			window.PlaySoundFile(file("reload.wav"))
-		}
-	}
-	if s.reloading {
-		s.reloadTime--
-		if s.reloadTime <= 0 {
-			s.reloadTime = 0
-			s.reloading = false
-		}
-	}
-	if s.shooting {
-		s.shootTime--
-		if s.shootTime <= 0 {
-			s.shootTime = 0
-			s.shooting = false
-			s.waitToReloadTime = frames(200 * time.Millisecond)
-			s.waitingToReload = true
+	if s.torsoTime > 0 {
+		s.torsoTime--
+		if s.torsoTime == 0 {
+			switch s.torso {
+			case idle:
+				// nothing to do in this case
+			case shooting:
+				s.torso = waitingToReload
+				s.torsoTime = frames(200 * time.Millisecond)
+			case reloading:
+				s.torso = idle
+			case waitingToReload:
+				s.torso = reloading
+				s.torsoTime = frames(250 * time.Millisecond)
+				window.PlaySoundFile(file("reload.wav"))
+			}
 		}
 	}
 
@@ -267,10 +262,10 @@ func (s *playingState) update(window draw.Window) state {
 	}
 	// player
 	hero := "hero "
-	if s.reloading {
+	if s.torso == reloading {
 		hero += "reload "
 	}
-	if s.shooting {
+	if s.torso == shooting {
 		hero += "shoot "
 	}
 	dir := "right"
@@ -350,8 +345,8 @@ func (s *playingState) shoot(window draw.Window) {
 	}
 	s.bullets = append(s.bullets, b)
 	s.assignment = s.generator.generate(rand.Int)
-	s.shooting = true
-	s.shootTime = frames(100 * time.Millisecond)
+	s.torso = shooting
+	s.torsoTime = frames(100 * time.Millisecond)
 }
 
 func (s *playingState) killZombie(i int) {
