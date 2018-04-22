@@ -1,0 +1,105 @@
+{
+	"comment": "",
+	"ignore": "test",
+	"package": [
+		{
+			"checksumSHA1": "+tsz6hbiOYT1oC57I3dvMfYbflE=",
+			"path": "github.com/go-gl/gl/v2.1/gl",
+			"revision": "68e2537930806bfcee1b92a0e14b4e9b8bb3a3e3",
+			"revisionTime": "2018-04-07T15:57:06Z"
+		},
+		{
+			"checksumSHA1": "lpOT5pEX2/9jSsUUA9xgTH29vV8=",
+			"path": "github.com/go-gl/glfw/v3.1/glfw",
+			"revision": "513e4f2bf85c31fba0fc4907abd7895242ccbe50",
+			"revisionTime": "2017-08-14T18:07:46Z"
+		},
+		{
+			"checksumSHA1": "AeHa3bnCEJfpwWQFOtWEpNZ/tWc=",
+			"path": "github.com/gonutz/blob",
+			"revision": "1cb1fe8f729e99458966e9ee03288439aa263b00",
+			"revisionTime": "2018-04-11T11:13:21Z"
+		},
+		{
+			"checksumSHA1": "PcGyvZ+pzdOG3e8Jj7DBY1E+YGw=",
+			"path": "github.com/gonutz/blob/cmd/blob",
+			"revision": "1cb1fe8f729e99458966e9ee03288439aa263b00",
+			"revisionTime": "2018-04-11T11:13:21Z"
+		},
+		{
+			"checksumSHA1": "+OdCrXczbnbKFCoH5LmjbSbS430=",
+			"path": "github.com/gonutz/d3d9",
+			"revision": "fb43752e88a033be14f66fa9e15d092e061719d4",
+			"revisionTime": "2018-04-11T21:48:00Z"
+		},
+		{
+			"checksumSHA1": "eHzBNGcP6U38V4opwD8u9LpV+i0=",
+			"path": "github.com/gonutz/ds",
+			"revision": "82969548412b9f2c00524bbd787f595e82996998",
+			"revisionTime": "2017-07-06T08:23:26Z"
+		},
+		{
+			"checksumSHA1": "HHJoxO8rX9fkVWKJz3GpREu5nC0=",
+			"path": "github.com/gonutz/mixer",
+			"revision": "a40121441cc5d1c5f6c01fce84999bd3995088f9",
+			"revisionTime": "2017-11-29T09:15:00Z"
+		},
+		{
+			"checksumSHA1": "hKhF62iO25ZsbwLPDXpMUCzxgOI=",
+			"path": "github.com/gonutz/mixer/dsound",
+			"revision": "a40121441cc5d1c5f6c01fce84999bd3995088f9",
+			"revisionTime": "2017-11-29T09:15:00Z"
+		},
+		{
+			"checksumSHA1": "Nabh1ihni+2li4oAMdNZRW7beDI=",
+			"path": "github.com/gonutz/mixer/wav",
+			"revision": "a40121441cc5d1c5f6c01fce84999bd3995088f9",
+			"revisionTime": "2017-11-29T09:15:00Z"
+		},
+		{
+			"checksumSHA1": "pAd9taI62Qc0zCzCRrzkWyIyjvY=",
+			"path": "github.com/gonutz/osext",
+			"revision": "9e22409d6bb63da8a0d4a21a76e95f81f1e1a9bc",
+			"revisionTime": "2017-12-06T09:17:09Z"
+		},
+		{
+			"checksumSHA1": "IMqc00GWQjlSSYWaeUcUT5lsK2M=",
+			"path": "github.com/gonutz/payload",
+			"revision": "8e665edd57a6dad9488cdf7c4cb5b4232e4ed8ba",
+			"revisionTime": "2017-12-25T12:57:59Z"
+		},
+		{
+			"checksumSHA1": "MNr6xgsDttTsguwXqP/tCEXbkzg=",
+			"path": "github.com/gonutz/payload/cmd/payload",
+			"revision": "8e665edd57a6dad9488cdf7c4cb5b4232e4ed8ba",
+			"revisionTime": "2017-12-25T12:57:59Z"
+		},
+		{
+			"checksumSHA1": "/SyWzrrGzjZh+X6stCfKW15YUkg=",
+			"path": "github.com/gonutz/prototype/draw",
+			"revision": "8034b006f79c191bf9bc418b91e140fc7105b507",
+			"revisionTime": "2017-11-28T14:00:28Z"
+		},
+		{
+			"checksumSHA1": "pV/A/OOb1U+gy5Wb03UC+onqrgs=",
+			"path": "github.com/gonutz/w32",
+			"revision": "0e072d98b46bef1b74cf5c249b05032c88788589",
+			"revisionTime": "2018-04-03T17:24:08Z"
+		},
+		{
+			"checksumSHA1": "nsTYYtv3S947OU5Lik68e6rB9a4=",
+			"path": "github.com/veandco/go-sdl2/sdl",
+			"revision": "4dfc7fa236d8f901a7976006e2a209fc6e743f24",
+			"revisionTime": "2018-04-20T03:48:09Z"
+		},
+		{
+			"path": "github.com/veandco/go-sdl2/sdl_image",
+			"revision": ""
+		},
+		{
+			"path": "github.com/veandco/go-sdl2/sdl_mixer",
+			"revision": ""
+		}
+	],
+	"rootPath": "github.com/gonutz/ld41"
+}
