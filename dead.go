@@ -23,9 +23,11 @@ type deadState struct {
 	editing        int
 	cursorBlink    int
 	cursorVisible  bool
+	score          int
 }
 
 func (s *deadState) enter(oldState state) {
+	s.score = -1
 	s.restartVisible = true
 	s.blink = 0
 	s.editing = -1
@@ -37,6 +39,7 @@ func (s *deadState) enter(oldState state) {
 	if oldState == playing {
 		s.caption = "You were eaten alive!"
 		score := playing.score
+		s.score = score
 		s.highscores = append(s.highscores, highscore{
 			score: score,
 			name:  "",
@@ -140,6 +143,16 @@ func (s *deadState) update(window draw.Window) state {
 	if s.editing == -1 && s.restartVisible {
 		w, _ := window.GetScaledTextSize(msg, textScale)
 		window.DrawScaledText(msg, (windowW-w)/2, scoresY+5*lineH+50, textScale, draw.White)
+	}
+	// score
+	if s.score >= 0 {
+		suffix := "s"
+		if s.score == 1 {
+			suffix = ""
+		}
+		text := fmt.Sprintf("You killed %d zombie%s", s.score, suffix)
+		w, _ := window.GetScaledTextSize(text, textScale)
+		window.DrawScaledText(text, (windowW-w)/2, 30, textScale, draw.DarkRed)
 	}
 	return nextState
 }
