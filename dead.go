@@ -135,7 +135,7 @@ func (s *deadState) update(window draw.Window) state {
 	}
 	// title and instructions
 	const (
-		msg       = "Press ENTER to restart"
+		msg       = "Press ENTER to play"
 		textScale = 3
 	)
 	w, h := window.GetScaledTextSize(s.caption, textScale)
