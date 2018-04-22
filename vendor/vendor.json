@@ -3,6 +3,10 @@
 	"ignore": "test",
 	"package": [
 		{
+			"path": "github.com/gnoutz/rsrc",
+			"revision": ""
+		},
+		{
 			"checksumSHA1": "+tsz6hbiOYT1oC57I3dvMfYbflE=",
 			"path": "github.com/go-gl/gl/v2.1/gl",
 			"revision": "68e2537930806bfcee1b92a0e14b4e9b8bb3a3e3",
@@ -79,6 +83,42 @@
 			"path": "github.com/gonutz/prototype/draw",
 			"revision": "8034b006f79c191bf9bc418b91e140fc7105b507",
 			"revisionTime": "2017-11-28T14:00:28Z"
+		},
+		{
+			"checksumSHA1": "THiRFRiAkHcP4xQ6K6sPZsLHxng=",
+			"path": "github.com/gonutz/rsrc",
+			"revision": "fc4bda5d03478b04ff09cbb38b59d8df20463643",
+			"revisionTime": "2018-02-12T01:35:51Z"
+		},
+		{
+			"checksumSHA1": "jHs17QBTPPk1Xa7mxgrov7RQNWM=",
+			"path": "github.com/gonutz/rsrc/binutil",
+			"revision": "fc4bda5d03478b04ff09cbb38b59d8df20463643",
+			"revisionTime": "2018-02-12T01:35:51Z"
+		},
+		{
+			"checksumSHA1": "PHRT6eTRgmug103WQAO97J/gvvo=",
+			"path": "github.com/gonutz/rsrc/coff",
+			"revision": "fc4bda5d03478b04ff09cbb38b59d8df20463643",
+			"revisionTime": "2018-02-12T01:35:51Z"
+		},
+		{
+			"checksumSHA1": "bQhyWSgKJXcDTYoY/iMYPIgzzMg=",
+			"path": "github.com/gonutz/rsrc/ico",
+			"revision": "fc4bda5d03478b04ff09cbb38b59d8df20463643",
+			"revisionTime": "2018-02-12T01:35:51Z"
+		},
+		{
+			"checksumSHA1": "u8q23jWk5CkN5HiCmMceLMkrnJE=",
+			"path": "github.com/gonutz/rsrc/internal",
+			"revision": "fc4bda5d03478b04ff09cbb38b59d8df20463643",
+			"revisionTime": "2018-02-12T01:35:51Z"
+		},
+		{
+			"checksumSHA1": "Mqk4YhUAYecokHUjvD7wypa9S7Q=",
+			"path": "github.com/gonutz/rsrc/rsrc",
+			"revision": "fc4bda5d03478b04ff09cbb38b59d8df20463643",
+			"revisionTime": "2018-02-12T01:35:51Z"
 		},
 		{
 			"checksumSHA1": "pV/A/OOb1U+gy5Wb03UC+onqrgs=",

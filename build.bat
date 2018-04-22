@@ -1,6 +1,11 @@
-REM build the blob and payload tools that are necessary to build the final game
+REM build the tools that are necessary to build the final game
 go build ./vendor/github.com/gonutz/blob/cmd/blob
 go build ./vendor/github.com/gonutz/payload/cmd/payload
+go build ./vendor/github.com/gonutz/rsrc
+
+REM build the resource files with the icon so the Go build tool adds it to the .exe
+rsrc -arch 386 -ico icon.ico -o rsrc_386.syso
+rsrc -arch amd64 -ico icon.ico -o rsrc_amd64.syso
 
 REM build a 32 bit Windows exe that runs on all Windows from XP up
 set GOARCH=386
@@ -13,3 +18,4 @@ del rsc.blob
 del game.exe
 del blob.exe
 del payload.exe
+del rsrc.exe

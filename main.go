@@ -36,8 +36,14 @@ func main() {
 	defer cleanUpAssets()
 
 	var musicStart time.Time
+	iconWasSet := false
 
 	check(draw.RunWindow(windowTitle, windowW, windowH, func(window draw.Window) {
+		if !iconWasSet {
+			setIcon()
+			iconWasSet = true
+		}
+
 		newState := state.update(window)
 		if state != newState {
 			state.leave()
