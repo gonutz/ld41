@@ -1,6 +1,8 @@
 No-Brain Jogging
 ================
 
+![Screenshot](https://raw.githubusercontent.com/gonutz/ld41/master/screenshots/screen%2001.png)
+
 This is my entry for the [Ludum Dare 41](https://ldjam.com/events/ludum-dare/41) game jam. The theme is: "Combine two Incompatible Genres".
 
 My two genres are:
@@ -30,3 +32,5 @@ build.bat
 ```
 
 This will create and run a statically linked executable containing all the resource data for the game. You can copy the file `No-Brain Jogging.exe` to any Windows machine from XP up and it will run there.
+
+![Video](https://raw.githubusercontent.com/gonutz/ld41/master/screenshots/video%2002.gif)
