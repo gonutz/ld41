@@ -9,6 +9,7 @@ import (
 const (
 	windowTitle      = "No-Brain Jogging"
 	windowW, windowH = 1000, 600
+	musicLength      = 8081 * time.Millisecond
 )
 
 type state interface {
@@ -34,6 +35,8 @@ func main() {
 
 	defer cleanUpAssets()
 
+	var musicStart time.Time
+
 	check(draw.RunWindow(windowTitle, windowW, windowH, func(window draw.Window) {
 		newState := state.update(window)
 		if state != newState {
@@ -41,6 +44,14 @@ func main() {
 			newState.enter(state)
 		}
 		state = newState
+
+		if loading.assetsLoaded {
+			now := time.Now()
+			if now.Sub(musicStart) >= musicLength {
+				window.PlaySoundFile(file("music.wav"))
+				musicStart = now
+			}
+		}
 	}))
 }
 
