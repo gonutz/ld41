@@ -95,6 +95,7 @@ func (s *playingState) update(window draw.Window) state {
 			if window.WasKeyPressed(keys[0]) || window.WasKeyPressed(keys[1]) {
 				if n != s.assignment.answer {
 					wrongNumber = true
+					window.PlaySoundFile(file("miss shot.wav"))
 					s.addFadingNumber(n, draw.Red)
 					s.shootBan = frames(500 * time.Millisecond)
 					break
@@ -264,6 +265,13 @@ func (s *playingState) update(window draw.Window) state {
 	}
 	hero += ".png"
 	window.DrawImageFile(file(hero), s.playerX, s.playerY)
+	if s.shootBan > 0 {
+		if s.playerFacingLeft {
+			window.DrawImageFile(file("hero eye blink left.png"), s.playerX, s.playerY)
+		} else {
+			window.DrawImageFile(file("hero eye blink right.png"), s.playerX, s.playerY)
+		}
+	}
 	// zombies
 	for _, z := range s.zombies {
 		dir := "right"
