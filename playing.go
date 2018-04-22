@@ -18,6 +18,7 @@ const (
 	zombieSpawnMin       = 1000 * time.Millisecond
 	zombieSpawnMax       = 2000 * time.Millisecond
 	playerWalkFrames     = 4
+	bloodW, bloodH       = 24, 20
 )
 
 type torsoState int
@@ -47,6 +48,7 @@ type playingState struct {
 	}
 	torso     torsoState
 	torsoTime int
+	blood     []bloodParticle
 }
 
 func (s *playingState) enter(state) {
@@ -179,6 +181,7 @@ func (s *playingState) update(window draw.Window) state {
 		}
 		if victimIndex != -1 {
 			s.killZombie(victimIndex)
+			window.PlaySoundFile(file("zombie death.wav"))
 		}
 		if victimIndex == -1 && (-100 <= b.x) && (b.x <= windowW+100) {
 			s.bullets[n] = *b
@@ -219,6 +222,22 @@ func (s *playingState) update(window draw.Window) state {
 			z.nextFrame = frames(250 * time.Millisecond)
 			z.frame = (z.frame + 1) % zombieFrameCount
 		}
+	}
+	// update blood and gore
+	{
+		n := 0
+		for i := range s.blood {
+			b := &s.blood[i]
+			b.x += b.vx
+			b.y += b.vy
+			b.rotation += b.dRotation
+			b.vy += 0.5
+			if b.y < windowH {
+				s.blood[n] = *b
+				n++
+			}
+		}
+		s.blood = s.blood[:n]
 	}
 	// animations
 	if s.torsoTime > 0 {
@@ -293,6 +312,16 @@ func (s *playingState) update(window draw.Window) state {
 		img := fmt.Sprintf("zombie %d %s %d.png", z.kind, dir, z.frame)
 		window.DrawImageFile(file(img), z.x, z.y)
 	}
+	// blood and gore
+	for i := range s.blood {
+		b := &s.blood[i]
+		window.DrawImageFileRotated(
+			file("blood particle.png"),
+			round(b.x),
+			round(b.y),
+			round(b.rotation),
+		)
+	}
 	// bullets
 	for _, b := range s.bullets {
 		img := "bullet left.png"
@@ -350,6 +379,22 @@ func (s *playingState) shoot(window draw.Window) {
 }
 
 func (s *playingState) killZombie(i int) {
+	// spray blood
+	z := s.zombies[i]
+	cx, cy := z.x+zombieW/2-bloodW/2, z.y+zombieH/2-bloodH/2
+	count := 10 + rand.Intn(20)
+	for i := 0; i < count; i++ {
+		s.blood = append(s.blood, bloodParticle{
+			x:         float32(cx),
+			y:         float32(cy),
+			vx:        3 - 6*rand.Float32(),
+			vy:        -10 - 5*rand.Float32(),
+			rotation:  360 * rand.Float32(),
+			dRotation: 2 - 4*rand.Float32(),
+		})
+	}
+
+	// remove zombie from list
 	copy(s.zombies[i:], s.zombies[i+1:])
 	s.zombies = s.zombies[:len(s.zombies)-1]
 	s.score++
@@ -402,4 +447,11 @@ type zombie struct {
 	frame      int
 	nextFrame  int
 	kind       int
+}
+
+type bloodParticle struct {
+	x, y      float32
+	vx, vy    float32
+	rotation  float32
+	dRotation float32
 }
