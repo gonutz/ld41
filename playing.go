@@ -10,6 +10,7 @@ import (
 const (
 	playerSpeed          = 4
 	playerW, playerH     = 172, 207
+	playerHeadH          = 60
 	bulletShootOffsetY   = 103
 	bulletW, bulletH     = 27, 9
 	zombieW, zombieH     = 116, 218
@@ -28,7 +29,13 @@ const (
 	reloading
 	waitingToReload
 	shooting
+	aimingAtHead
+	bleeding
 )
+
+func dying(s torsoState) bool {
+	return s >= aimingAtHead
+}
 
 type playingState struct {
 	playerX, playerY int
@@ -46,15 +53,18 @@ type playingState struct {
 	zombieSpawnDelay struct {
 		minFrames, maxFrames float32
 	}
-	torso     torsoState
-	torsoTime int
-	blood     []bloodParticle
+	torso          torsoState
+	torsoTime      int
+	blood          []bloodParticle
+	leaveStateTime int
 }
 
 func (s *playingState) enter(state) {
 	s.playerX = (windowW - playerW) / 2
 	s.playerY = windowH - playerH - 100
 	s.playerFacingLeft = false
+	s.playerWalkFrame = 0
+	s.playerWalkTime = 0
 	s.generator = mathGenerator{
 		ops: []mathOp{add, subtract, add, subtract, multiply, divide},
 		max: 9,
@@ -63,13 +73,16 @@ func (s *playingState) enter(state) {
 	s.bullets = nil
 	s.zombies = nil
 	s.numbers = nil
+	s.nextZombie = 0
+	s.shootBan = 0
+	s.score = 0
 	s.zombieSpawnDelay.minFrames = float32(frames(zombieSpawnMin))
 	s.zombieSpawnDelay.maxFrames = float32(frames(zombieSpawnMax))
 	s.newZombie()
-	s.shootBan = 0
-	s.score = 0
-	s.torsoTime = 0
 	s.torso = idle
+	s.torsoTime = 0
+	s.blood = nil
+	s.leaveStateTime = -1
 }
 
 func (*playingState) leave() {}
@@ -90,14 +103,18 @@ var fireKeys = [10][2]draw.Key{
 func (s *playingState) update(window draw.Window) state {
 	// handle input
 	if window.WasKeyPressed(draw.KeyEscape) {
-		return menu
+		if dying(s.torso) {
+			return dead
+		} else {
+			return menu
+		}
 	}
 	// shoot or miss
 	s.shootBan--
 	if s.shootBan < 0 {
 		s.shootBan = 0
 	}
-	if s.shootBan <= 0 {
+	if !dying(s.torso) && s.shootBan <= 0 {
 		wrongNumber := false
 		for n, keys := range fireKeys {
 			if window.WasKeyPressed(keys[0]) || window.WasKeyPressed(keys[1]) {
@@ -121,21 +138,23 @@ func (s *playingState) update(window draw.Window) state {
 	}
 	// move left/right
 	walking := false
-	const margin = -50
-	if window.IsKeyDown(draw.KeyLeft) || window.IsKeyDown(draw.KeyA) {
-		walking = true
-		s.playerX -= playerSpeed
-		if s.playerX < margin {
-			s.playerX = margin
+	if !dying(s.torso) {
+		const margin = -50
+		if window.IsKeyDown(draw.KeyLeft) || window.IsKeyDown(draw.KeyA) {
+			walking = true
+			s.playerX -= playerSpeed
+			if s.playerX < margin {
+				s.playerX = margin
+			}
+			s.playerFacingLeft = true
+		} else if window.IsKeyDown(draw.KeyRight) || window.IsKeyDown(draw.KeyD) {
+			walking = true
+			s.playerX += playerSpeed
+			if s.playerX+playerW > windowW-margin {
+				s.playerX = windowW - margin - playerW
+			}
+			s.playerFacingLeft = false
 		}
-		s.playerFacingLeft = true
-	} else if window.IsKeyDown(draw.KeyRight) || window.IsKeyDown(draw.KeyD) {
-		walking = true
-		s.playerX += playerSpeed
-		if s.playerX+playerW > windowW-margin {
-			s.playerX = windowW - margin - playerW
-		}
-		s.playerFacingLeft = false
 	}
 	if walking {
 		s.playerWalkTime--
@@ -149,6 +168,12 @@ func (s *playingState) update(window draw.Window) state {
 	}
 
 	// update world
+	if s.leaveStateTime > 0 {
+		s.leaveStateTime--
+		if s.leaveStateTime <= 0 {
+			return dead
+		}
+	}
 	// shoot bullets
 	n := 0
 	for i := range s.bullets {
@@ -201,26 +226,29 @@ func (s *playingState) update(window draw.Window) state {
 	}
 	s.numbers = s.numbers[:n]
 	// update zombies
-	s.nextZombie--
-	if s.nextZombie <= 0 {
-		s.newZombie()
-	}
-	for i := range s.zombies {
-		z := &s.zombies[i]
-		if z.facingLeft {
-			z.x -= 2
-		} else {
-			z.x += 2
+	if !dying(s.torso) {
+		s.nextZombie--
+		if s.nextZombie <= 0 {
+			s.newZombie()
 		}
-		const hitDist = 30
-		if abs((s.playerX+playerW/2)-(z.x+zombieW/2)) < hitDist {
-			return dead
-		}
-		const zombieFrameCount = 4
-		z.nextFrame--
-		if z.nextFrame <= 0 {
-			z.nextFrame = frames(250 * time.Millisecond)
-			z.frame = (z.frame + 1) % zombieFrameCount
+		for i := range s.zombies {
+			z := &s.zombies[i]
+			if z.facingLeft {
+				z.x -= 2
+			} else {
+				z.x += 2
+			}
+			const hitDist = 40
+			if abs((s.playerX+playerW/2)-(z.x+zombieW/2)) < hitDist {
+				s.torso = aimingAtHead
+				s.torsoTime = frames(time.Second)
+			}
+			const zombieFrameCount = 4
+			z.nextFrame--
+			if z.nextFrame <= 0 {
+				z.nextFrame = frames(250 * time.Millisecond)
+				z.frame = (z.frame + 1) % zombieFrameCount
+			}
 		}
 	}
 	// update blood and gore
@@ -255,6 +283,18 @@ func (s *playingState) update(window draw.Window) state {
 				s.torso = reloading
 				s.torsoTime = frames(250 * time.Millisecond)
 				window.PlaySoundFile(file("reload.wav"))
+			case aimingAtHead:
+				s.torso = bleeding
+				window.PlaySoundFile(file("shot.wav"))
+				x, y := s.playerNeck()
+				s.sprayBlood(x, y, 100, 200)
+				s.torsoTime = frames(50 * time.Millisecond)
+				s.leaveStateTime = frames(3 * time.Second)
+			case bleeding:
+				// nothing to do in this case
+				s.torsoTime = frames(50 * time.Millisecond)
+				x, y := s.playerNeck()
+				s.sprayBlood(x, y, 5, 10)
 			}
 		}
 	}
@@ -287,6 +327,12 @@ func (s *playingState) update(window draw.Window) state {
 	if s.torso == shooting {
 		hero += "shoot "
 	}
+	if s.torso == aimingAtHead {
+		hero += "aiming at head "
+	}
+	if s.torso == bleeding {
+		hero += "bleeding head "
+	}
 	dir := "right"
 	if s.playerFacingLeft {
 		dir = "left"
@@ -309,7 +355,12 @@ func (s *playingState) update(window draw.Window) state {
 		if z.facingLeft {
 			dir = "left"
 		}
-		img := fmt.Sprintf("zombie %d %s %d.png", z.kind, dir, z.frame)
+		var img string
+		if dying(s.torso) {
+			img = fmt.Sprintf("zombie %d %s.png", z.kind, dir)
+		} else {
+			img = fmt.Sprintf("zombie %d %s %d.png", z.kind, dir, z.frame)
+		}
 		window.DrawImageFile(file(img), z.x, z.y)
 	}
 	// blood and gore
@@ -381,18 +432,8 @@ func (s *playingState) shoot(window draw.Window) {
 func (s *playingState) killZombie(i int) {
 	// spray blood
 	z := s.zombies[i]
-	cx, cy := z.x+zombieW/2-bloodW/2, z.y+zombieH/2-bloodH/2
-	count := 10 + rand.Intn(20)
-	for i := 0; i < count; i++ {
-		s.blood = append(s.blood, bloodParticle{
-			x:         float32(cx),
-			y:         float32(cy),
-			vx:        3 - 6*rand.Float32(),
-			vy:        -10 - 5*rand.Float32(),
-			rotation:  360 * rand.Float32(),
-			dRotation: 2 - 4*rand.Float32(),
-		})
-	}
+	cx, cy := z.x+zombieW/2, z.y+zombieH/2
+	s.sprayBlood(cx, cy, 10, 30)
 
 	// remove zombie from list
 	copy(s.zombies[i:], s.zombies[i+1:])
@@ -402,6 +443,20 @@ func (s *playingState) killZombie(i int) {
 	s.zombieSpawnDelay.minFrames = min * zombieSpawnReduction
 	if s.score%2 == 1 {
 		s.zombieSpawnDelay.maxFrames = max * zombieSpawnReduction
+	}
+}
+
+func (s *playingState) sprayBlood(x, y, min, max int) {
+	count := min + rand.Intn(max-min)
+	for i := 0; i < count; i++ {
+		s.blood = append(s.blood, bloodParticle{
+			x:         float32(x - bloodW/2),
+			y:         float32(y - bloodH/2),
+			vx:        3 - 6*rand.Float32(),
+			vy:        -10 - 5*rand.Float32(),
+			rotation:  360 * rand.Float32(),
+			dRotation: 2 - 4*rand.Float32(),
+		})
 	}
 }
 
@@ -428,6 +483,14 @@ func (s *playingState) newZombie() {
 	min := round(s.zombieSpawnDelay.minFrames)
 	max := round(s.zombieSpawnDelay.maxFrames)
 	s.nextZombie = min + rand.Intn(max-min)
+}
+
+func (s *playingState) playerNeck() (x, y int) {
+	dx := -6
+	if s.playerFacingLeft {
+		dx = -dx
+	}
+	return s.playerX + playerW/2 + dx, s.playerY + playerHeadH
 }
 
 type fadingNumber struct {
