@@ -266,13 +266,11 @@ func (s *playingState) update(window draw.Window) state {
 	window.DrawImageFile(file(hero), s.playerX, s.playerY)
 	// zombies
 	for _, z := range s.zombies {
-		img := "zombie "
+		dir := "right"
 		if z.facingLeft {
-			img += "left "
-		} else {
-			img += "right "
+			dir = "left"
 		}
-		img += fmt.Sprintf("%d.png", z.frame)
+		img := fmt.Sprintf("zombie %d %s %d.png", z.kind, dir, z.frame)
 		window.DrawImageFile(file(img), z.x, z.y)
 	}
 	// bullets
@@ -359,6 +357,8 @@ func (s *playingState) newZombie() {
 	} else {
 		z.x = -zombieW
 	}
+	const zombieKindCount = 3
+	z.kind = rand.Intn(zombieKindCount)
 	s.zombies = append(s.zombies, z)
 	min := round(s.zombieSpawnDelay.minFrames)
 	max := round(s.zombieSpawnDelay.maxFrames)
@@ -381,4 +381,5 @@ type zombie struct {
 	facingLeft bool
 	frame      int
 	nextFrame  int
+	kind       int
 }
