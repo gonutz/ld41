@@ -33,6 +33,12 @@ type playingState struct {
 	zombieSpawnDelay struct {
 		minFrames, maxFrames float32
 	}
+	reloadTime       int
+	reloading        bool
+	waitToReloadTime int
+	waitingToReload  bool
+	shootTime        int
+	shooting         bool
 }
 
 func (s *playingState) enter(state) {
@@ -52,6 +58,10 @@ func (s *playingState) enter(state) {
 	s.newZombie()
 	s.shootBan = 0
 	s.score = 0
+	s.reloadTime = 0
+	s.reloading = false
+	s.shootTime = 0
+	s.shooting = false
 }
 
 func (*playingState) leave() {}
@@ -185,6 +195,33 @@ func (s *playingState) update(window draw.Window) state {
 			return dead
 		}
 	}
+	// animations
+	if s.waitingToReload {
+		s.waitToReloadTime--
+		if s.waitToReloadTime <= 0 {
+			s.waitToReloadTime = 0
+			s.waitingToReload = false
+			s.reloadTime = frames(250 * time.Millisecond)
+			s.reloading = true
+			window.PlaySoundFile(file("reload.wav"))
+		}
+	}
+	if s.reloading {
+		s.reloadTime--
+		if s.reloadTime <= 0 {
+			s.reloadTime = 0
+			s.reloading = false
+		}
+	}
+	if s.shooting {
+		s.shootTime--
+		if s.shootTime <= 0 {
+			s.shootTime = 0
+			s.shooting = false
+			s.waitToReloadTime = frames(200 * time.Millisecond)
+			s.waitingToReload = true
+		}
+	}
 
 	// render
 	// background
@@ -207,11 +244,20 @@ func (s *playingState) update(window draw.Window) state {
 		}
 	}
 	// player
-	if s.playerFacingLeft {
-		window.DrawImageFile(file("hero left.png"), s.playerX, s.playerY)
-	} else {
-		window.DrawImageFile(file("hero right.png"), s.playerX, s.playerY)
+	hero := "hero "
+	if s.reloading {
+		hero += "reload "
 	}
+	if s.shooting {
+		hero += "shoot "
+	}
+	if s.playerFacingLeft {
+		hero += "left"
+	} else {
+		hero += "right"
+	}
+	hero += ".png"
+	window.DrawImageFile(file(hero), s.playerX, s.playerY)
 	// zombies
 	for _, z := range s.zombies {
 		img := "zombie right.png"
@@ -272,6 +318,8 @@ func (s *playingState) shoot(window draw.Window) {
 	}
 	s.bullets = append(s.bullets, b)
 	s.assignment = s.generator.generate(rand.Int)
+	s.shooting = true
+	s.shootTime = frames(100 * time.Millisecond)
 }
 
 func (s *playingState) killZombie(i int) {
