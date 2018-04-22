@@ -16,20 +16,20 @@ func (*instructionsState) update(window draw.Window) state {
 	}
 	const (
 		text = `
-     Solve math problems.
-        Shoot zombies.
-           Survive!
+   Solve math problems.
+      Shoot zombies.
+         Survive!
 
-    Enter the solution to
-  the calculation above your
-   head to shoot your rifle.
+  Enter the solution to
+the calculation above your
+ head to shoot your rifle.
 
-   Use the Left/Right arrow 
-     keys or A/D to move.
+ Use the Left/Right arrow 
+   keys or A/D to move.
 
 
 
-Press ENTER to start the game.
+   Press ENTER to play
 `
 		scale = 2
 	)
