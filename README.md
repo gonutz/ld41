@@ -1,7 +1,7 @@
 No-Brain Jogging
 ================
 
-![Screenshot](https://raw.githubusercontent.com/gonutz/ld41/master/screenshots/screen%2001.png)
+![Screenshot](https://raw.githubusercontent.com/gonutz/ld41/master/screenshots/screen%2002.png)
 
 This is my entry for the [Ludum Dare 41](https://ldjam.com/events/ludum-dare/41) game jam. The theme is: "Combine two Incompatible Genres".
 
