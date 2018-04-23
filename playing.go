@@ -20,6 +20,7 @@ const (
 	zombieSpawnMax       = 2000 * time.Millisecond
 	playerWalkFrames     = 4
 	bloodW, bloodH       = 24, 20
+	zombieDeathSounds    = 5
 )
 
 type torsoState int
@@ -207,7 +208,7 @@ func (s *playingState) update(window draw.Window) state {
 		}
 		if victimIndex != -1 {
 			s.killZombie(victimIndex)
-			window.PlaySoundFile(file("zombie death.wav"))
+			window.PlaySoundFile(file(fmt.Sprintf("zombie death %d.wav", rand.Intn(zombieDeathSounds))))
 		}
 		if victimIndex == -1 && (-100 <= b.x) && (b.x <= windowW+100) {
 			s.bullets[n] = *b
@@ -287,6 +288,7 @@ func (s *playingState) update(window draw.Window) state {
 			case realizing:
 				s.torso = aimingAtHead
 				s.torsoTime = frames(time.Second)
+				window.PlaySoundFile(file("uh oh.wav"))
 			case aimingAtHead:
 				s.torso = bleeding
 				window.PlaySoundFile(file("shot.wav"))
