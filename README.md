@@ -33,4 +33,22 @@ build.bat
 
 This will create and run a statically linked executable containing all the resource data for the game. You can copy the file `No-Brain Jogging.exe` to any Windows machine from XP up and it will run there.
 
+Linux Build
+-----------
+
+For the Linux build you need the following C libraries installed: `libgl1-mesa-dev`, `libxrandr-dev`, `libxcursor-dev`, `libxinerama-dev`, `libxi-dev`.
+
+On Debian, Ubuntu, Linux Mint etc. do this:
+
+`sudo apt-get install libgl1-mesa-dev libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev`
+
+Run these commands to build and run the game on Linux:
+
+```
+go get -u github.com/gonutz/ld41
+cd $GOPATH/src/github.com/gonutz/ld41
+./build.sh
+./"No-Brain Jogging"
+```
+
 ![Video](https://raw.githubusercontent.com/gonutz/ld41/master/screenshots/video%2002.gif)
