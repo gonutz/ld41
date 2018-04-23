@@ -3,7 +3,7 @@ No-Brain Jogging
 
 ![Screenshot](https://raw.githubusercontent.com/gonutz/ld41/master/screenshots/screen%2002.png)
 
-This is my entry for the [Ludum Dare 41](https://ldjam.com/events/ludum-dare/41) game jam. The theme is: "Combine two Incompatible Genres".
+This is [my entry](https://ldjam.com/events/ludum-dare/41/no-brain-jogging) for the [Ludum Dare 41](https://ldjam.com/events/ludum-dare/41) game jam. The theme is: "Combine two Incompatible Genres".
 
 My two genres are:
 
