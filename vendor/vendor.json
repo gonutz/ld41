@@ -79,10 +79,14 @@
 			"revisionTime": "2017-12-25T12:57:59Z"
 		},
 		{
-			"checksumSHA1": "/SyWzrrGzjZh+X6stCfKW15YUkg=",
+			"path": "github.com/gonutz/prototye/draw",
+			"revision": ""
+		},
+		{
+			"checksumSHA1": "7ORssGVe12HDnU1lgs/ohKGHQpw=",
 			"path": "github.com/gonutz/prototype/draw",
-			"revision": "8034b006f79c191bf9bc418b91e140fc7105b507",
-			"revisionTime": "2017-11-28T14:00:28Z"
+			"revision": "9906e852f883eb9a2c04fe4713cb8bd747b2d3a8",
+			"revisionTime": "2018-04-24T19:36:17Z"
 		},
 		{
 			"checksumSHA1": "THiRFRiAkHcP4xQ6K6sPZsLHxng=",
