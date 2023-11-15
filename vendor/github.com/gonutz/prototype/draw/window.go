@@ -1,6 +1,22 @@
+// Package draw contains the RunWindow function which you call from main to open
+// a window. You pass it a callback which is called at 60 frames per second. The
+// callback gives you a Window which you use to do input handling, rendering and
+// audio output. See the documentation for Window for more details on what you
+// can do.
 package draw
 
-import "strconv"
+import (
+	"io"
+	"os"
+	"strconv"
+)
+
+// OpenFile allows you to re-direct from the file system to your own data
+// storage for image and sound files. It defaults to os.Open but you can
+// overwrite it with any function that fits the signature.
+var OpenFile = func(path string) (io.ReadCloser, error) {
+	return os.Open(path)
+}
 
 // UpdateFunction is used as a callback when creating a window. It is called
 // at 60Hz and you do all your event handling and drawing in it.
@@ -19,6 +35,17 @@ type Window interface {
 
 	// Size returns the window's size in pixels.
 	Size() (width, height int)
+
+	// SetFullscreen toggles between the fixed-size window with title and border
+	// and going full screen on the monitor that the window is placed on when
+	// the call to SetFullscreen(true) occurs.
+	// Use Window.Size to get the new size after this.
+	// By default the window is not fullscreen. It always starts windowed.
+	SetFullscreen(f bool)
+
+	// ShowCursor set the OS' mouse cursor to visible or invisible. It defaults
+	// to visible if you do not call ShowCursor.
+	ShowCursor(show bool)
 
 	// WasKeyPressed reports whether the specified key was pressed at any time
 	// during the last frame. If the user presses a key and releases it in the
@@ -48,6 +75,19 @@ type Window interface {
 	// the function call. It is relative to the drawing area of the window.
 	MousePosition() (x, y int)
 
+	// MouseWheelY returns the aggregate vertical mouse wheel rotation during
+	// the last frame. A value of 1 typically corresponds to one tick of the
+	// wheel. A positive value means the wheel was rotated forward, away from
+	// the user, a negative value means the wheel was rotated backward towards
+	// the user.
+	MouseWheelY() float64
+
+	// MouseWheelX returns the aggregate horizontal mouse wheel rotation during
+	// the last frame. A value of 1 typically corresponds to one tick of the
+	// wheel. A positive value means the wheel was rotated right, a negative
+	// value means the wheel was rotated left.
+	MouseWheelX() float64
+
 	// DrawPoint draws a single point at the given screen position in pixels.
 	DrawPoint(x, y int, color Color)
 
@@ -76,10 +116,10 @@ type Window interface {
 
 	// DrawImageFileTo draws the image to the given screen rectangle, possibly
 	// scaling it in either direction, and rotates it around the rectangles
-	// center point by the given angle. The rotation is counterclockwise.
+	// center point by the given angle. The rotation is clockwise.
 	// If the image file is not found or has the wrong format an error is
 	// returned.
-	DrawImageFileTo(path string, x, y, w, h, degrees int) error
+	DrawImageFileTo(path string, x, y, w, h, rotationCWDeg int) error
 
 	// DrawImageFileRotated draws the image with its top-left corner at the
 	// given coordinates but roatated clockwise about the given angle in degrees
@@ -87,12 +127,35 @@ type Window interface {
 	// at the given location if the rotation is 0.
 	// If the image file is not found or has the wrong format an error is
 	// returned.
-	DrawImageFileRotated(path string, x, y, degrees int) error
+	DrawImageFileRotated(path string, x, y, rotationCWDeg int) error
 
-	// GetTextSize returns the size the given text would have when begin drawn.
+	// DrawImageFilePart lets you specify the source and destination rectangle
+	// for the image file to be drawn. The image is rotated about its center by
+	// the given angle in degrees, clockwise. You may flip the image by
+	// specifying a negative width or height. E.g. to flip in x direction,
+	// instead of
+	//
+	//     DrawImageFilePart("x.png", 0, 0, 100, 100, 0, 0, 100, 100, 0)
+	//
+	// you would do
+	//
+	//     DrawImageFilePart("x.png", 100, 0, -100, 100, 0, 0, 100, 100, 0)
+	//
+	// swapping the source rectangle's left and right positions.
+	//
+	// If the image file is not found or has the wrong format an error is
+	// returned.
+	DrawImageFilePart(
+		path string,
+		sourceX, sourceY, sourceWidth, sourceHeight int,
+		destX, destY, destWidth, destHeight int,
+		rotationCWDeg int,
+	) error
+
+	// GetTextSize returns the size the given text would have when being drawn.
 	GetTextSize(text string) (w, h int)
 
-	// GetScaledTextSize returns the size the given text would have when begin
+	// GetScaledTextSize returns the size the given text would have when being
 	// drawn at the given scale.
 	GetScaledTextSize(text string, scale float32) (w, h int)
 
@@ -127,7 +190,7 @@ func RGBA(r, g, b, a float32) Color {
 	return Color{r, g, b, a}
 }
 
-// predefined colors
+// These are predefined colors for intuitive use, no need to set color channels.
 var (
 	Black       = Color{0, 0, 0, 1}
 	White       = Color{1, 1, 1, 1}
@@ -170,6 +233,7 @@ type MouseClick struct {
 // MouseButton is one of the three buttons typically present on a mouse.
 type MouseButton int
 
+// These are the possible values for MouseButton.
 const (
 	LeftButton MouseButton = iota
 	MiddleButton
@@ -182,7 +246,7 @@ const (
 // Key represents a key on the keyboard.
 type Key int
 
-// key constants
+// These are all available keyboard keys.
 const (
 	KeyA Key = 1 + iota
 	KeyB

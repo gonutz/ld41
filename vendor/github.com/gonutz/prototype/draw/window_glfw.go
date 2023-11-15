@@ -7,16 +7,17 @@ import (
 	"errors"
 	"image"
 	"image/draw"
-	_ "image/png"
+	_ "image/jpeg" // We allow loading JPEGs by default.
+	_ "image/png"  // We allow loading PNGs by default.
 	"io"
 	"math"
-	"os"
 	"runtime"
 	"strings"
 	"time"
+	"unicode/utf8"
 
-	"github.com/go-gl/gl/v2.1/gl"
-	"github.com/go-gl/glfw/v3.1/glfw"
+	"github.com/gonutz/gl/v2.1/gl"
+	"github.com/gonutz/glfw/v3.3/glfw"
 )
 
 func init() {
@@ -29,9 +30,13 @@ type window struct {
 	typed          []rune
 	window         *glfw.Window
 	width, height  float64
+	originalWidth  int
+	originalHeight int
+	fullscreen     bool
 	textures       map[string]texture
 	clicks         []MouseClick
 	mouseX, mouseY int
+	wheelX, wheelY float64
 }
 
 // RunWindow creates a new window and calls update 60 times per second.
@@ -71,16 +76,22 @@ func RunWindow(title string, width, height int, update UpdateFunction) error {
 	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
 
 	w := &window{
-		running:  true,
-		window:   win,
-		width:    float64(width),
-		height:   float64(height),
-		textures: make(map[string]texture),
+		running:        true,
+		window:         win,
+		originalWidth:  width,
+		originalHeight: height,
+		width:          float64(width),
+		height:         float64(height),
+		textures:       make(map[string]texture),
 	}
 	win.SetKeyCallback(w.keyPress)
 	win.SetCharCallback(w.charTyped)
 	win.SetMouseButtonCallback(w.mouseButtonEvent)
 	win.SetCursorPosCallback(w.mousePositionChanged)
+	win.SetScrollCallback(func(_ *glfw.Window, dx, dy float64) {
+		w.wheelX += dx
+		w.wheelY += dy
+	})
 	win.SetSizeCallback(func(_ *glfw.Window, width, height int) {
 		w.width, w.height = float64(width), float64(height)
 		gl.MatrixMode(gl.PROJECTION)
@@ -89,6 +100,8 @@ func RunWindow(title string, width, height int, update UpdateFunction) error {
 		gl.Viewport(0, 0, int32(width), int32(height))
 		gl.MatrixMode(gl.MODELVIEW)
 	})
+
+	w.loadTexture(bytes.NewReader(bitmapFontWhitePng[:]), fontTextureID)
 
 	lastUpdateTime := time.Now().Add(-time.Hour)
 	const updateInterval = 1.0 / 60.0
@@ -104,6 +117,8 @@ func RunWindow(title string, width, height int, update UpdateFunction) error {
 			w.pressed = w.pressed[0:0]
 			w.typed = w.typed[0:0]
 			w.clicks = w.clicks[0:0]
+			w.wheelX = 0
+			w.wheelY = 0
 
 			lastUpdateTime = now
 			win.SwapBuffers()
@@ -117,12 +132,49 @@ func RunWindow(title string, width, height int, update UpdateFunction) error {
 	return nil
 }
 
+const fontTextureID = "///font_texture"
+
 func (w *window) Close() {
 	w.running = false
 }
 
-func (c *window) Size() (int, int) {
-	return int(c.width + 0.5), int(c.height + 0.5)
+func (w *window) Size() (int, int) {
+	return int(w.width + 0.5), int(w.height + 0.5)
+}
+
+func (w *window) SetFullscreen(f bool) {
+	if f == w.fullscreen {
+		return
+	}
+	w.fullscreen = f
+
+	if w.fullscreen {
+		monitor := monitorContaining(w.window.GetPos())
+		mode := monitor.GetVideoMode()
+		w.window.SetMonitor(monitor, 0, 0, mode.Width, mode.Height, 60)
+	} else {
+		screen := w.window.GetMonitor().GetVideoMode()
+		newW, newH := w.originalWidth, w.originalHeight
+		w.window.SetMonitor(nil, (screen.Width-newW)/2, (screen.Height-newH)/2, newW, newH, 60)
+	}
+}
+
+func monitorContaining(winX, winY int) *glfw.Monitor {
+	for _, m := range glfw.GetMonitors() {
+		x, y, w, h := m.GetWorkarea()
+		if x <= winX && winX < x+w && y <= winY && winY < y+h {
+			return m
+		}
+	}
+	return glfw.GetPrimaryMonitor()
+}
+
+func (w *window) ShowCursor(show bool) {
+	if show {
+		w.window.SetInputMode(glfw.CursorMode, glfw.CursorNormal)
+	} else {
+		w.window.SetInputMode(glfw.CursorMode, glfw.CursorHidden)
+	}
 }
 
 func (w *window) keyPress(_ *glfw.Window, key glfw.Key, _ int, action glfw.Action, _ glfw.ModifierKey) {
@@ -278,7 +330,7 @@ func (w *window) getOrLoadTexture(path string) (texture, error) {
 		return tex, nil
 	}
 
-	imgFile, err := os.Open(path)
+	imgFile, err := OpenFile(path)
 	if err != nil {
 		return texture{}, err
 	}
@@ -302,11 +354,11 @@ func (w *window) Characters() string {
 	return string(w.typed)
 }
 
-func (win *window) mouseButtonEvent(w *glfw.Window, button glfw.MouseButton, action glfw.Action, mod glfw.ModifierKey) {
+func (w *window) mouseButtonEvent(win *glfw.Window, button glfw.MouseButton, action glfw.Action, mod glfw.ModifierKey) {
 	if action == glfw.Press {
 		b := toMouseButton(button)
-		x, y := win.window.GetCursorPos()
-		win.clicks = append(win.clicks, MouseClick{X: int(x), Y: int(y), Button: b})
+		x, y := w.window.GetCursorPos()
+		w.clicks = append(w.clicks, MouseClick{X: int(x), Y: int(y), Button: b})
 	}
 }
 
@@ -314,7 +366,17 @@ func (w *window) mousePositionChanged(_ *glfw.Window, x, y float64) {
 	w.mouseX, w.mouseY = int(x+0.5), int(y+0.5)
 }
 
-func (w *window) MousePosition() (int, int) { return w.mouseX, w.mouseY }
+func (w *window) MousePosition() (int, int) {
+	return w.mouseX, w.mouseY
+}
+
+func (w *window) MouseWheelY() float64 {
+	return w.wheelY
+}
+
+func (w *window) MouseWheelX() float64 {
+	return w.wheelX
+}
 
 func toMouseButton(b glfw.MouseButton) MouseButton {
 	if b == glfw.MouseButtonRight {
@@ -397,23 +459,23 @@ func (w *window) DrawImageFile(path string, x, y int) error {
 	return nil
 }
 
-func (win *window) DrawImageFileRotated(path string, x, y, degrees int) error {
-	return win.DrawImageFileTo(path, x, y, -1, -1, degrees)
+func (w *window) DrawImageFileRotated(path string, x, y, degrees int) error {
+	return w.DrawImageFileTo(path, x, y, -1, -1, degrees)
 }
 
-func (win *window) DrawImageFileTo(path string, x, y, w, h, degrees int) error {
-	tex, err := win.getOrLoadTexture(path)
+func (w *window) DrawImageFileTo(path string, x, y, width, height, degrees int) error {
+	tex, err := w.getOrLoadTexture(path)
 	if err != nil {
 		return err
 	}
 
-	if w == -1 && h == -1 {
-		w, h = tex.w, tex.h
+	if width == -1 && height == -1 {
+		width, height = tex.w, tex.h
 	}
 
 	x1, y1 := float32(x), float32(y)
-	x2, y2 := float32(x+w-0), float32(y+h-0)
-	cx, cy := x1+float32(w)/2, y1+float32(h)/2
+	x2, y2 := float32(x+width-0), float32(y+height-0)
+	cx, cy := x1+float32(width)/2, y1+float32(height)/2
 	sin, cos := math.Sincos(float64(degrees) / 180 * math.Pi)
 	sin32, cos32 := float32(sin), float32(cos)
 	p := [4]pointf{
@@ -454,46 +516,99 @@ func (win *window) DrawImageFileTo(path string, x, y, w, h, degrees int) error {
 	return nil
 }
 
-type pointf struct{ x, y float32 }
+func (w *window) DrawImageFilePart(
+	path string,
+	sourceX, sourceY, sourceWidth, sourceHeight int,
+	destX, destY, destWidth, destHeight int,
+	rotationCWDeg int,
+) error {
+	tex, err := w.getOrLoadTexture(path)
+	if err != nil {
+		return err
+	}
 
-func (win *window) GetTextSize(text string) (w, h int) {
-	return win.GetScaledTextSize(text, 1.0)
+	x1, y1 := float32(destX), float32(destY)
+	x2, y2 := float32(destX+destWidth), float32(destY+destHeight)
+	cx, cy := x1+float32(destWidth)/2, y1+float32(destHeight)/2
+	sin, cos := math.Sincos(float64(rotationCWDeg) / 180 * math.Pi)
+	sin32, cos32 := float32(sin), float32(cos)
+	p := [4]pointf{
+		{x1, y1},
+		{x2, y1},
+		{x2, y2},
+		{x1, y2},
+	}
+	for i := range p {
+		p[i].x, p[i].y = p[i].x-cx, p[i].y-cy
+		p[i].x, p[i].y = cos32*p[i].x-sin32*p[i].y, sin32*p[i].x+cos32*p[i].y
+		p[i].x, p[i].y = p[i].x+cx, p[i].y+cy
+	}
+
+	u0 := float32(sourceX) / float32(tex.w)
+	u1 := float32(sourceX+sourceWidth) / float32(tex.w)
+	v0 := float32(sourceY) / float32(tex.h)
+	v1 := float32(sourceY+sourceHeight) / float32(tex.h)
+
+	gl.Enable(gl.TEXTURE_2D)
+	gl.BindTexture(gl.TEXTURE_2D, tex.id)
+	gl.Begin(gl.QUADS)
+
+	gl.Color4f(1, 1, 1, 1)
+	gl.TexCoord2f(u0, v0)
+	gl.Vertex2f(p[0].x, p[0].y)
+
+	gl.Color4f(1, 1, 1, 1)
+	gl.TexCoord2f(u1, v0)
+	gl.Vertex2f(p[1].x, p[1].y)
+
+	gl.Color4f(1, 1, 1, 1)
+	gl.TexCoord2f(u1, v1)
+	gl.Vertex2f(p[2].x, p[2].y)
+
+	gl.Color4f(1, 1, 1, 1)
+	gl.TexCoord2f(u0, v1)
+	gl.Vertex2f(p[3].x, p[3].y)
+
+	gl.End()
+	gl.Disable(gl.TEXTURE_2D)
+
+	return nil
+
+	return nil
 }
 
-func (win *window) GetScaledTextSize(text string, scale float32) (w, h int) {
-	if len(text) == 0 {
-		return 0, 0
-	}
-	fontTexture, ok := win.textures[fontTextureID]
+type pointf struct{ x, y float32 }
+
+func (w *window) GetTextSize(text string) (width, height int) {
+	return w.GetScaledTextSize(text, 1.0)
+}
+
+func (w *window) GetScaledTextSize(text string, scale float32) (width, height int) {
+	fontTexture, ok := w.textures[fontTextureID]
 	if !ok {
 		return 0, 0
 	}
-	w = int(float32(fontTexture.w/16)*scale + 0.5)
-	h = int(float32(fontTexture.h/16)*scale + 0.5)
+	width = int(float32(fontTexture.w/16)*scale + 0.5)
+	height = int(float32(fontTexture.h/16)*scale + 0.5)
 	lines := strings.Split(text, "\n")
 	maxLineW := 0
 	for _, line := range lines {
-		if len(line) > maxLineW {
-			maxLineW = len(line)
+		w := utf8.RuneCountInString(line)
+		if w > maxLineW {
+			maxLineW = w
 		}
 	}
-	return w * maxLineW, h * len(lines)
+	return width * maxLineW, height * len(lines)
 }
 
 func (w *window) DrawText(text string, x, y int, color Color) {
 	w.DrawScaledText(text, x, y, 1.0, color)
 }
 
-const fontTextureID = "///font_texture"
-
 func (w *window) DrawScaledText(text string, x, y int, scale float32, color Color) {
 	fontTexture, ok := w.textures[fontTextureID]
 	if !ok {
-		var err error
-		fontTexture, err = w.loadTexture(bytes.NewReader(bitmapFontWhitePng[:]), fontTextureID)
-		if err != nil {
-			panic(err)
-		}
+		return
 	}
 
 	width, height := int32(fontTexture.w/16), int32(fontTexture.h/16)
@@ -513,9 +628,7 @@ func (w *window) DrawScaledText(text string, x, y int, scale float32, color Colo
 			destY += height
 			continue
 		}
-		if r < 0 || r >= 128 {
-			r = '?'
-		}
+		r = runeToFont(r)
 
 		srcX = float32(r%16) / 16
 		srcY = float32(r/16) / 16

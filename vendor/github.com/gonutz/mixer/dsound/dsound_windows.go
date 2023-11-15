@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gonutz/ds"
-	"github.com/gonutz/w32"
+	"github.com/gonutz/w32/v2"
 )
 
 var (

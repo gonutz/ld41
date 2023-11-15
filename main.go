@@ -1,10 +1,16 @@
 package main
 
 import (
-	"github.com/gonutz/prototype/draw"
+	"embed"
+	"io"
 	"math/rand"
 	"time"
+
+	"github.com/gonutz/prototype/draw"
 )
+
+//go:embed rsc/*
+var rsc embed.FS
 
 const (
 	windowTitle      = "No-Brain Jogging"
@@ -20,7 +26,6 @@ type state interface {
 
 // all game states
 var (
-	loading      = &loadingState{}
 	menu         = &menuState{}
 	playing      = &playingState{}
 	dead         = &deadState{}
@@ -28,15 +33,14 @@ var (
 )
 
 func main() {
+	draw.OpenFile = func(path string) (io.ReadCloser, error) {
+		return rsc.Open("rsc/" + path)
+	}
+
 	rand.Seed(time.Now().UnixNano())
 
-	var state state = loading
+	var state state = menu
 	state.enter(nil)
-
-	defer cleanUpAssets()
-
-	hideCursor()
-	defer showCursor()
 
 	var musicStart time.Time
 	iconWasSet := false
@@ -47,6 +51,8 @@ func main() {
 			iconWasSet = true
 		}
 
+		window.ShowCursor(false)
+
 		newState := state.update(window)
 		if state != newState {
 			state.leave()
@@ -54,12 +60,10 @@ func main() {
 		}
 		state = newState
 
-		if loading.assetsLoaded {
-			now := time.Now()
-			if now.Sub(musicStart) >= musicLength {
-				window.PlaySoundFile(file("music.wav"))
-				musicStart = now
-			}
+		now := time.Now()
+		if now.Sub(musicStart) >= musicLength {
+			window.PlaySoundFile("music.wav")
+			musicStart = now
 		}
 	}))
 }

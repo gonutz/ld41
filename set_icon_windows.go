@@ -1,6 +1,6 @@
 package main
 
-import "github.com/gonutz/w32"
+import "github.com/gonutz/w32/v2"
 
 func setIcon() {
 	// the icon is contained in the .exe file as a resource, load it and set it

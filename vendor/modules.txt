@@ -1,0 +1,28 @@
+# github.com/gonutz/d3d9 v1.2.1
+## explicit; go 1.11
+github.com/gonutz/d3d9
+# github.com/gonutz/ds v1.0.0
+## explicit; go 1.11
+github.com/gonutz/ds
+# github.com/gonutz/gl v1.0.0
+## explicit; go 1.11
+github.com/gonutz/gl/v2.1/gl
+# github.com/gonutz/glfw v1.0.2
+## explicit; go 1.11
+github.com/gonutz/glfw/v3.3/glfw
+# github.com/gonutz/go-sdl2 v1.0.0
+## explicit; go 1.11
+github.com/gonutz/go-sdl2/img
+github.com/gonutz/go-sdl2/mix
+github.com/gonutz/go-sdl2/sdl
+# github.com/gonutz/mixer v1.0.0
+## explicit; go 1.11
+github.com/gonutz/mixer
+github.com/gonutz/mixer/dsound
+github.com/gonutz/mixer/wav
+# github.com/gonutz/prototype v1.1.1
+## explicit; go 1.11
+github.com/gonutz/prototype/draw
+# github.com/gonutz/w32/v2 v2.11.1
+## explicit; go 1.11
+github.com/gonutz/w32/v2

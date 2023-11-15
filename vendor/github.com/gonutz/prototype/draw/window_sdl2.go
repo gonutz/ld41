@@ -4,15 +4,16 @@ package draw
 
 import (
 	"errors"
+	"io/ioutil"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
-	"unsafe"
+	"unicode/utf8"
 
-	"github.com/veandco/go-sdl2/sdl"
-	"github.com/veandco/go-sdl2/sdl_image"
-	"github.com/veandco/go-sdl2/sdl_mixer"
+	"github.com/gonutz/go-sdl2/img"
+	"github.com/gonutz/go-sdl2/mix"
+	"github.com/gonutz/go-sdl2/sdl"
 )
 
 func init() {
@@ -20,8 +21,6 @@ func init() {
 }
 
 type window struct {
-	MouseMoved bool
-
 	update      UpdateFunction
 	window      *sdl.Window
 	running     bool
@@ -35,6 +34,8 @@ type window struct {
 	clicks      []MouseClick
 	pressedKeys []Key
 	mouse       struct{ x, y int }
+	wheelX      float64
+	wheelY      float64
 }
 
 var windowRunningMutex sync.Mutex
@@ -52,7 +53,7 @@ func RunWindow(title string, width, height int, update UpdateFunction) error {
 	}
 	defer sdl.Quit()
 
-	sdlWindow, renderer, err := sdl.CreateWindowAndRenderer(width, height, 0)
+	sdlWindow, renderer, err := sdl.CreateWindowAndRenderer(int32(width), int32(height), 0)
 	if err != nil {
 		return err
 	}
@@ -85,9 +86,8 @@ func RunWindow(title string, width, height int, update UpdateFunction) error {
 }
 
 func (w *window) createBitmapFont() {
-	ptr := unsafe.Pointer(&bitmapFontWhitePng[0])
-	rwops := sdl.RWFromMem(ptr, len(bitmapFontWhitePng))
-	texture, err := img.LoadTexture_RW(w.renderer, rwops, false)
+	rwops, _ := sdl.RWFromMem(bitmapFontWhitePng)
+	texture, err := img.LoadTextureRW(w.renderer, rwops, false)
 	if err != nil {
 		panic(err)
 	}
@@ -118,34 +118,57 @@ func (w *window) runMainLoop() {
 			case *sdl.MouseMotionEvent:
 				w.mouse.x = int(event.X)
 				w.mouse.y = int(event.Y)
-				w.MouseMoved = true
 			case *sdl.MouseButtonEvent:
 				if event.State == sdl.PRESSED {
 					w.clicks = append(w.clicks, makeClick(event))
-					w.mouseDown[MouseButton(event.Button)] = true
+					switch event.Button {
+					case sdl.BUTTON_LEFT:
+						w.mouseDown[LeftButton] = true
+					case sdl.BUTTON_RIGHT:
+						w.mouseDown[RightButton] = true
+					case sdl.BUTTON_MIDDLE:
+						w.mouseDown[MiddleButton] = true
+					}
 				}
 				if event.State == sdl.RELEASED {
-					w.mouseDown[MouseButton(event.Button)] = false
+					switch event.Button {
+					case sdl.BUTTON_LEFT:
+						w.mouseDown[LeftButton] = false
+					case sdl.BUTTON_RIGHT:
+						w.mouseDown[RightButton] = false
+					case sdl.BUTTON_MIDDLE:
+						w.mouseDown[MiddleButton] = false
+					}
 				}
-			case *sdl.KeyDownEvent:
-				w.setKeyDown(event.Keysym.Sym, true)
-			case *sdl.KeyUpEvent:
-				w.setKeyDown(event.Keysym.Sym, false)
+			case *sdl.MouseWheelEvent:
+				dx, dy := event.X, event.Y
+				if event.Direction == sdl.MOUSEWHEEL_FLIPPED {
+					dx, dy = -event.X, -event.Y
+				}
+				w.wheelX += float64(dx)
+				w.wheelY += float64(dy)
+			case *sdl.KeyboardEvent:
+				if event.Type == sdl.KEYDOWN {
+					w.setKeyDown(event.Keysym.Sym, true)
+				} else {
+					w.setKeyDown(event.Keysym.Sym, false)
+				}
 			}
 		}
 
 		now := time.Now()
 		if now.Sub(lastUpdateTime).Seconds() > updateInterval {
-			// clear backgroud to black
+			// clear background to black
 			w.renderer.SetDrawColor(0, 0, 0, 0)
 			w.renderer.Clear()
 			// client updates window
 			w.update(w)
 			// reset all events
 			w.pressedKeys = nil
-			w.MouseMoved = false
 			w.clicks = nil
 			w.typed = nil
+			w.wheelX = 0
+			w.wheelY = 0
 			lastUpdateTime = now
 			// show the window
 			w.renderer.Present()
@@ -186,7 +209,24 @@ func (w *window) close() {
 }
 
 func (w *window) Size() (int, int) {
-	return w.window.GetSize()
+	width, height := w.window.GetSize()
+	return int(width), int(height)
+}
+
+func (w *window) SetFullscreen(f bool) {
+	if f {
+		w.window.SetFullscreen(sdl.WINDOW_FULLSCREEN_DESKTOP)
+	} else {
+		w.window.SetFullscreen(0)
+	}
+}
+
+func (w *window) ShowCursor(show bool) {
+	if show {
+		sdl.ShowCursor(sdl.ENABLE)
+	} else {
+		sdl.ShowCursor(sdl.DISABLE)
+	}
 }
 
 func (w *window) WasKeyPressed(key Key) bool {
@@ -227,6 +267,14 @@ func (w *window) MousePosition() (int, int) {
 	return w.mouse.x, w.mouse.y
 }
 
+func (w *window) MouseWheelY() float64 {
+	return w.wheelY
+}
+
+func (w *window) MouseWheelX() float64 {
+	return w.wheelX
+}
+
 func (w *window) Close() {
 	w.running = false
 }
@@ -262,7 +310,7 @@ func makeSDLpoints(from []point) []sdl.Point {
 
 func (w *window) DrawPoint(x, y int, color Color) {
 	w.setColor(color)
-	w.renderer.DrawPoint(x, y)
+	w.renderer.DrawPoint(int32(x), int32(y))
 }
 
 func (w *window) setColor(color Color) {
@@ -289,7 +337,7 @@ func (w *window) DrawLine(fromX, fromY, toX, toY int, color Color) {
 }
 
 func (w *window) line(fromX, fromY, toX, toY int) {
-	w.renderer.DrawLine(fromX, fromY, toX, toY)
+	w.renderer.DrawLine(int32(fromX), int32(fromY), int32(toX), int32(toY))
 }
 
 func (w *window) DrawRect(x, y, width, height int, color Color) {
@@ -360,16 +408,36 @@ func (win *window) DrawImageFileTo(path string, x, y, w, h, degrees int) error {
 	return nil
 }
 
-func (w *window) DrawImageFilePortion(path string, srcX, srcY, srcW, srcH, toX, toY int) error {
+func (w *window) DrawImageFilePart(
+	path string,
+	sourceX, sourceY, sourceWidth, sourceHeight int,
+	destX, destY, destWidth, destHeight int,
+	rotationCWDeg int,
+) error {
 	w.loadImageIfNecessary(path)
 	img := w.textures[path]
 	if img == nil {
 		return errors.New(`File "` + path + `" could not be loaded.`)
 	}
-	w.renderer.Copy(
+	var flip sdl.RendererFlip
+	if sourceWidth < 0 {
+		flip |= sdl.FLIP_HORIZONTAL
+		sourceX += sourceWidth
+		sourceWidth = -sourceWidth
+	}
+	if sourceHeight < 0 {
+		flip |= sdl.FLIP_VERTICAL
+		sourceY += sourceHeight
+		sourceHeight = -sourceHeight
+	}
+	w.renderer.CopyEx(
 		img,
-		&sdl.Rect{int32(srcX), int32(srcY), int32(srcW), int32(srcH)},
-		&sdl.Rect{int32(toX), int32(toY), int32(srcW), int32(srcH)})
+		&sdl.Rect{int32(sourceX), int32(sourceY), int32(sourceWidth), int32(sourceHeight)},
+		&sdl.Rect{int32(destX), int32(destY), int32(destWidth), int32(destHeight)},
+		float64(rotationCWDeg),
+		nil,
+		flip,
+	)
 	return nil
 }
 
@@ -377,18 +445,27 @@ func (w *window) loadImageIfNecessary(path string) {
 	if _, ok := w.textures[path]; ok {
 		return
 	}
-	img, err := img.Load(path)
-	if err != nil {
-		w.textures[path] = nil
-		return
+
+	if f, err := OpenFile(path); err == nil {
+		defer f.Close()
+		if data, err := ioutil.ReadAll(f); err == nil {
+			if rw, err := sdl.RWFromMem(data); err == nil {
+				img, err := img.LoadRW(rw, false)
+
+				if err != nil {
+					w.textures[path] = nil
+					return
+				}
+				defer img.Free()
+				texture, err := w.renderer.CreateTextureFromSurface(img)
+				if err != nil {
+					w.textures[path] = nil
+					return
+				}
+				w.textures[path] = texture
+			}
+		}
 	}
-	defer img.Free()
-	texture, err := w.renderer.CreateTextureFromSurface(img)
-	if err != nil {
-		w.textures[path] = nil
-		return
-	}
-	w.textures[path] = texture
 }
 
 func (win *window) GetTextSize(text string) (w, h int) {
@@ -396,9 +473,6 @@ func (win *window) GetTextSize(text string) (w, h int) {
 }
 
 func (win *window) GetScaledTextSize(text string, scale float32) (w, h int) {
-	if len(text) == 0 {
-		return 0, 0
-	}
 	_, _, width, height, _ := win.fontTexture.Query()
 	width /= 16
 	height /= 16
@@ -407,8 +481,9 @@ func (win *window) GetScaledTextSize(text string, scale float32) (w, h int) {
 	lines := strings.Split(text, "\n")
 	maxLineW := 0
 	for _, line := range lines {
-		if len(line) > maxLineW {
-			maxLineW = len(line)
+		w := utf8.RuneCountInString(line)
+		if w > maxLineW {
+			maxLineW = w
 		}
 	}
 	return w * maxLineW, h * len(lines)
@@ -435,9 +510,7 @@ func (w *window) DrawScaledText(text string, x, y int, scale float32, color Colo
 			dest.Y += dest.H
 			continue
 		}
-		if r < 0 || r >= 128 {
-			r = '?'
-		}
+		r = runeToFont(r)
 		src.X = int32(r%16) * width
 		src.Y = int32(r/16) * height
 		w.renderer.Copy(w.fontTexture, &src, &dest)
@@ -459,7 +532,14 @@ func (w *window) loadSoundIfNecessary(path string) {
 	if _, ok := w.soundChunks[path]; ok {
 		return
 	}
-	w.soundChunks[path], _ = mix.LoadWAV(path)
+	if f, err := OpenFile(path); err == nil {
+		defer f.Close()
+		if data, err := ioutil.ReadAll(f); err == nil {
+			if rw, err := sdl.RWFromMem(data); err == nil {
+				w.soundChunks[path], _ = mix.LoadWAVRW(rw, false)
+			}
+		}
+	}
 }
 
 func toKey(k sdl.Keycode) Key {

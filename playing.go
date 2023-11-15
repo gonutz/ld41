@@ -122,7 +122,7 @@ func (s *playingState) update(window draw.Window) state {
 			if window.WasKeyPressed(keys[0]) || window.WasKeyPressed(keys[1]) {
 				if n != s.assignment.answer {
 					wrongNumber = true
-					window.PlaySoundFile(file("miss shot.wav"))
+					window.PlaySoundFile("miss shot.wav")
 					s.addFadingNumber(n, draw.Red)
 					s.shootBan = frames(500 * time.Millisecond)
 					break
@@ -208,7 +208,7 @@ func (s *playingState) update(window draw.Window) state {
 		}
 		if victimIndex != -1 {
 			s.killZombie(victimIndex)
-			window.PlaySoundFile(file(fmt.Sprintf("zombie death %d.wav", rand.Intn(zombieDeathSounds))))
+			window.PlaySoundFile(fmt.Sprintf("zombie death %d.wav", rand.Intn(zombieDeathSounds)))
 		}
 		if victimIndex == -1 && (-100 <= b.x) && (b.x <= windowW+100) {
 			s.bullets[n] = *b
@@ -284,14 +284,14 @@ func (s *playingState) update(window draw.Window) state {
 			case waitingToReload:
 				s.torso = reloading
 				s.torsoTime = frames(250 * time.Millisecond)
-				window.PlaySoundFile(file("reload.wav"))
+				window.PlaySoundFile("reload.wav")
 			case realizing:
 				s.torso = aimingAtHead
 				s.torsoTime = frames(time.Second)
-				window.PlaySoundFile(file("uh oh.wav"))
+				window.PlaySoundFile("uh oh.wav")
 			case aimingAtHead:
 				s.torso = bleeding
-				window.PlaySoundFile(file("shot.wav"))
+				window.PlaySoundFile("shot.wav")
 				x, y := s.playerNeck()
 				s.sprayBlood(x, y, 100, 200)
 				s.torsoTime = frames(50 * time.Millisecond)
@@ -345,15 +345,15 @@ func (s *playingState) update(window draw.Window) state {
 	}
 	hero += dir
 	hero += ".png"
-	window.DrawImageFile(file(hero), s.playerX, s.playerY)
+	window.DrawImageFile(hero, s.playerX, s.playerY)
 	if s.shootBan > 0 {
-		window.DrawImageFile(file("hero eye blink "+dir+".png"), s.playerX, s.playerY)
+		window.DrawImageFile("hero eye blink "+dir+".png", s.playerX, s.playerY)
 	}
 	if walking {
 		img := fmt.Sprintf("hero legs walk %s %d.png", dir, s.playerWalkFrame)
-		window.DrawImageFile(file(img), s.playerX, s.playerY)
+		window.DrawImageFile(img, s.playerX, s.playerY)
 	} else {
-		window.DrawImageFile(file("hero legs stand "+dir+".png"), s.playerX, s.playerY)
+		window.DrawImageFile("hero legs stand "+dir+".png", s.playerX, s.playerY)
 	}
 	// zombies
 	for _, z := range s.zombies {
@@ -367,13 +367,13 @@ func (s *playingState) update(window draw.Window) state {
 		} else {
 			img = fmt.Sprintf("zombie %d %s %d.png", z.kind, dir, z.frame)
 		}
-		window.DrawImageFile(file(img), z.x, z.y)
+		window.DrawImageFile(img, z.x, z.y)
 	}
 	// blood and gore
 	for i := range s.blood {
 		b := &s.blood[i]
 		window.DrawImageFileRotated(
-			file("blood particle.png"),
+			"blood particle.png",
 			round(b.x),
 			round(b.y),
 			round(b.rotation),
@@ -385,11 +385,11 @@ func (s *playingState) update(window draw.Window) state {
 		if b.dx > 0 {
 			img = "bullet right.png"
 		}
-		window.DrawImageFile(file(img), b.x, b.y)
+		window.DrawImageFile(img, b.x, b.y)
 	}
 	// score
 	{
-		window.DrawImageFile(file("dead head.png"), 0, 0)
+		window.DrawImageFile("dead head.png", 0, 0)
 		text := romanNumeral(s.score)
 		const textScale = 3
 		_, h := window.GetScaledTextSize(text, textScale)
@@ -418,7 +418,7 @@ func (s *playingState) update(window draw.Window) state {
 }
 
 func (s *playingState) shoot(window draw.Window) {
-	window.PlaySoundFile(file("shot.wav"))
+	window.PlaySoundFile("shot.wav")
 	const bulletSpeed = 30
 	var b bullet
 	b.y = s.playerY + bulletShootOffsetY

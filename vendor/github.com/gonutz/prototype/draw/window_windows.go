@@ -7,29 +7,28 @@ import (
 	"errors"
 	"image"
 	"image/draw"
+	_ "image/jpeg"
 	"image/png"
 	"math"
-	"os"
 	"runtime"
 	"strings"
 	"sync"
 	"syscall"
 	"unicode/utf16"
+	"unicode/utf8"
 	"unsafe"
 
 	"github.com/gonutz/d3d9"
 	"github.com/gonutz/mixer"
 	"github.com/gonutz/mixer/wav"
-	"github.com/gonutz/w32"
+	"github.com/gonutz/w32/v2"
 )
-
-func init() {
-	runtime.LockOSThread()
-}
 
 const (
 	vertexFormat = d3d9.FVF_XYZRHW | d3d9.FVF_DIFFUSE | d3d9.FVF_TEX1
 	vertexStride = 28
+
+	windowedStyle = w32.WS_OVERLAPPED | w32.WS_CAPTION | w32.WS_SYSMENU | w32.WS_VISIBLE
 
 	fontTextureID = "///font"
 )
@@ -42,6 +41,9 @@ var (
 )
 
 func RunWindow(title string, width, height int, update UpdateFunction) error {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	defer func() {
 		windowOpenMutex.Lock()
 		windowIsOpen = false
@@ -88,44 +90,88 @@ func RunWindow(title string, width, height int, update UpdateFunction) error {
 	if atom == 0 {
 		return errors.New("RegisterClassEx failed")
 	}
+	defer w32.UnregisterClassAtom(atom, w32.GetModuleHandle(""))
 
-	var style uint = w32.WS_OVERLAPPED | w32.WS_CAPTION | w32.WS_SYSMENU | w32.WS_VISIBLE
 	var windowSize = w32.RECT{0, 0, int32(width), int32(height)}
 	// NOTE MSDN says you cannot pass WS_OVERLAPPED to this function but it
 	// seems to work (on XP and Windows 8.1 at least) in conjuntion with the
 	// other flags
-	if w32.AdjustWindowRect(&windowSize, style, false) {
-		width = int(windowSize.Right - windowSize.Left)
-		height = int(windowSize.Bottom - windowSize.Top)
+	if w32.AdjustWindowRect(&windowSize, windowedStyle, false) {
+		width = int(windowSize.Width())
+		height = int(windowSize.Height())
 	}
 
-	// find the first monitor that is large enough to fit the window, if none is
-	// found we just use the default monitor
-	var selectedMonitor uint = d3d9.ADAPTER_DEFAULT
+	// Enum all monitors. We want to find the right one to show our window on.
+	type monitor struct {
+		handle                w32.HMONITOR
+		width, height         int
+		workLeft, workTop     int
+		workWidth, workHeight int
+		refreshRate           int
+	}
+	var monitors []monitor
+
 	monitorCount := d3d.GetAdapterCount()
 	for i := uint(0); i < monitorCount; i++ {
-		mode, err := d3d.GetAdapterDisplayMode(i)
-		if err == nil && int(mode.Width) >= width && int(mode.Height) >= height {
-			selectedMonitor = i
-			break
+		if mode, err := d3d.GetAdapterDisplayMode(i); err == nil {
+			if handle := w32.HMONITOR(d3d.GetAdapterMonitor(i)); handle != 0 {
+				var info w32.MONITORINFO
+				if w32.GetMonitorInfo(handle, &info) {
+					monitors = append(monitors, monitor{
+						handle:      handle,
+						width:       int(mode.Width),
+						height:      int(mode.Height),
+						workWidth:   int(info.RcWork.Width()),
+						workHeight:  int(info.RcWork.Height()),
+						workLeft:    int(info.RcWork.Left),
+						workTop:     int(info.RcWork.Top),
+						refreshRate: int(mode.RefreshRate),
+					})
+				}
+			}
 		}
 	}
-	// center the window in the monitor, if any of these functions fail, x,y
-	// will simply be 0,0 which is fine in that case
-	var x, y int
-	refreshRate := 60 // default to 60 Hz in case we cannot query the monitor
-	mode, err := d3d.GetAdapterDisplayMode(selectedMonitor)
-	if err == nil {
-		if mode.RefreshRate != 0 { // 0 is some invalid default value
-			refreshRate = int(mode.RefreshRate)
+
+	// find the largest monitor so we can make our back buffer handle any
+	// fullscreen size.
+	backBufferWidth, backBufferHeight := width, height
+	for _, m := range monitors {
+		if m.width > backBufferWidth {
+			backBufferWidth = m.width
 		}
-		monitor := d3d.GetAdapterMonitor(selectedMonitor)
-		if monitor != 0 {
-			var info w32.MONITORINFO
-			if w32.GetMonitorInfo(w32.HMONITOR(monitor), &info) {
-				x = int(info.RcMonitor.Left) + int(mode.Width/2) - width/2
-				y = int(info.RcMonitor.Top) + int(mode.Height/2) - height/2
+		if m.height > backBufferHeight {
+			backBufferHeight = m.height
+		}
+	}
+
+	// move the currently active monitor to the front of the list so it is
+	// picked before the others if it is large enough
+	if activeWindow := w32.GetForegroundWindow(); activeWindow != 0 {
+		activeMonitor := w32.MonitorFromWindow(
+			activeWindow,
+			w32.MONITOR_DEFAULTTONULL,
+		)
+		if activeMonitor != 0 {
+			for i, m := range monitors {
+				if m.handle == activeMonitor {
+					monitors[0], monitors[i] = monitors[i], monitors[0]
+				}
 			}
+		}
+	}
+
+	// find the right monitor to display the window on and center the window in
+	// it, if none is found, x,y will simply be 0,0 which is fine in that case
+	refreshRate := 60 // default to 60 Hz in case we cannot query the monitor
+	var x, y int
+	for _, m := range monitors {
+		if m.workWidth >= width && m.workHeight >= height {
+			x = m.workLeft + (m.workWidth-width)/2
+			y = m.workTop + (m.workHeight-height)/2
+			if m.refreshRate != 0 {
+				refreshRate = m.refreshRate
+			}
+			break
 		}
 	}
 
@@ -133,13 +179,14 @@ func RunWindow(title string, width, height int, update UpdateFunction) error {
 		0,
 		syscall.StringToUTF16Ptr("GoPrototypeWindowClass"),
 		nil,
-		style,
+		windowedStyle,
 		x, y, width, height,
 		0, 0, 0, nil,
 	)
 	if window == 0 {
 		return errors.New("CreateWindowEx failed")
 	}
+	defer w32.DestroyWindow(window)
 	globalWindow.handle = window
 	w32.SetWindowText(window, title)
 
@@ -156,16 +203,18 @@ func RunWindow(title string, width, height int, update UpdateFunction) error {
 		return errors.New("RegisterRawInputDevices failed")
 	}
 
-	device, _, err := d3d.CreateDevice(
+	device, presentParams, err := d3d.CreateDevice(
 		d3d9.ADAPTER_DEFAULT,
 		d3d9.DEVTYPE_HAL,
 		d3d9.HWND(window),
 		d3d9.CREATE_SOFTWARE_VERTEXPROCESSING,
 		d3d9.PRESENT_PARAMETERS{
 			BackBufferFormat:     d3d9.FMT_UNKNOWN, // use current display format
+			BackBufferWidth:      uint32(backBufferWidth),
+			BackBufferHeight:     uint32(backBufferHeight),
 			BackBufferCount:      1,
 			Windowed:             1,
-			SwapEffect:           d3d9.SWAPEFFECT_DISCARD,
+			SwapEffect:           d3d9.SWAPEFFECT_COPY, // so Present can use rects
 			HDeviceWindow:        d3d9.HWND(window),
 			PresentationInterval: d3d9.PRESENT_INTERVAL_ONE, // enable VSync
 		},
@@ -175,27 +224,30 @@ func RunWindow(title string, width, height int, update UpdateFunction) error {
 	}
 	defer device.Release()
 
-	device.SetFVF(vertexFormat)
-	device.SetRenderState(d3d9.RS_ZENABLE, d3d9.ZB_FALSE)
-	device.SetRenderState(d3d9.RS_CULLMODE, d3d9.CULL_CCW)
-	device.SetRenderState(d3d9.RS_LIGHTING, 0)
-	device.SetRenderState(d3d9.RS_SRCBLEND, d3d9.BLEND_SRCALPHA)
-	device.SetRenderState(d3d9.RS_DESTBLEND, d3d9.BLEND_INVSRCALPHA)
-	device.SetRenderState(d3d9.RS_ALPHABLENDENABLE, 1)
-	// use nearest neighbor texture filtering
-	device.SetSamplerState(0, d3d9.SAMP_MINFILTER, d3d9.TEXF_NONE)
-	device.SetSamplerState(0, d3d9.SAMP_MAGFILTER, d3d9.TEXF_NONE)
+	setRenderState := func() {
+		device.SetFVF(vertexFormat)
+		device.SetRenderState(d3d9.RS_ZENABLE, d3d9.ZB_FALSE)
+		device.SetRenderState(d3d9.RS_CULLMODE, d3d9.CULL_NONE)
+		device.SetRenderState(d3d9.RS_LIGHTING, 0)
+		device.SetRenderState(d3d9.RS_SRCBLEND, d3d9.BLEND_SRCALPHA)
+		device.SetRenderState(d3d9.RS_DESTBLEND, d3d9.BLEND_INVSRCALPHA)
+		device.SetRenderState(d3d9.RS_ALPHABLENDENABLE, 1)
+		// use nearest neighbor texture filtering
+		device.SetSamplerState(0, d3d9.SAMP_MINFILTER, d3d9.TEXF_NONE)
+		device.SetSamplerState(0, d3d9.SAMP_MAGFILTER, d3d9.TEXF_NONE)
 
-	device.SetTextureStageState(0, d3d9.TSS_COLOROP, d3d9.TOP_MODULATE)
-	device.SetTextureStageState(0, d3d9.TSS_COLORARG1, d3d9.TA_TEXTURE)
-	device.SetTextureStageState(0, d3d9.TSS_COLORARG2, d3d9.TA_DIFFUSE)
+		device.SetTextureStageState(0, d3d9.TSS_COLOROP, d3d9.TOP_MODULATE)
+		device.SetTextureStageState(0, d3d9.TSS_COLORARG1, d3d9.TA_TEXTURE)
+		device.SetTextureStageState(0, d3d9.TSS_COLORARG2, d3d9.TA_DIFFUSE)
 
-	device.SetTextureStageState(0, d3d9.TSS_ALPHAOP, d3d9.TOP_MODULATE)
-	device.SetTextureStageState(0, d3d9.TSS_ALPHAARG1, d3d9.TA_TEXTURE)
-	device.SetTextureStageState(0, d3d9.TSS_ALPHAARG2, d3d9.TA_DIFFUSE)
+		device.SetTextureStageState(0, d3d9.TSS_ALPHAOP, d3d9.TOP_MODULATE)
+		device.SetTextureStageState(0, d3d9.TSS_ALPHAARG1, d3d9.TA_TEXTURE)
+		device.SetTextureStageState(0, d3d9.TSS_ALPHAARG2, d3d9.TA_DIFFUSE)
 
-	device.SetTextureStageState(1, d3d9.TSS_COLOROP, d3d9.TOP_DISABLE)
-	device.SetTextureStageState(1, d3d9.TSS_ALPHAOP, d3d9.TOP_DISABLE)
+		device.SetTextureStageState(1, d3d9.TSS_COLOROP, d3d9.TOP_DISABLE)
+		device.SetTextureStageState(1, d3d9.TSS_ALPHAOP, d3d9.TOP_DISABLE)
+	}
+	setRenderState()
 
 	globalWindow.device = device
 	if err := globalWindow.loadFontTexture(); err != nil {
@@ -218,6 +270,9 @@ func RunWindow(title string, width, height int, update UpdateFunction) error {
 	// what D3D9 reports; we could measure some frames and estimate the actual
 	// refresh rate, then compensate for it
 
+	deviceIsLost := false
+	defer setShowCursorCountTo(0)
+
 	var msg w32.MSG
 	w32.PeekMessage(&msg, 0, 0, 0, w32.PM_NOREMOVE)
 	for msg.Message != w32.WM_QUIT && globalWindow.running {
@@ -225,36 +280,57 @@ func RunWindow(title string, width, height int, update UpdateFunction) error {
 			w32.TranslateMessage(&msg)
 			w32.DispatchMessage(&msg)
 		} else {
-			if err := device.BeginScene(); err != nil {
-				return err
+			if deviceIsLost {
+				_, err = device.Reset(presentParams)
+				if err == nil {
+					deviceIsLost = false
+					setRenderState()
+				}
 			}
 
-			var wasUpdated bool
-			for nextUpdate > 0 {
-				// clear the screen to black before the update
-				globalWindow.FillRect(0, 0, width, height, Black)
-				update(globalWindow)
-				wasUpdated = true
-				nextUpdate -= 1
-			}
-			nextUpdate += updatesPerVsync
+			if !deviceIsLost {
+				if err := device.BeginScene(); err != nil {
+					return err
+				}
 
-			if globalWindow.d3d9Error != nil {
-				return globalWindow.d3d9Error
-			}
+				var wasUpdated bool
+				for nextUpdate > 0 {
+					// clear the screen to black before the update
+					w, h := globalWindow.Size()
+					globalWindow.FillRect(0, 0, w, h, Black)
+					update(globalWindow)
+					globalWindow.flushBacklog()
+					wasUpdated = true
+					nextUpdate -= 1
+				}
+				nextUpdate += updatesPerVsync
 
-			if err := device.EndScene(); err != nil {
-				return err
-			}
-			if err := device.Present(nil, nil, 0, nil); err != nil {
-				return err
-			}
+				if globalWindow.d3d9Error != nil {
+					return globalWindow.d3d9Error
+				}
 
-			if wasUpdated {
-				globalWindow.finishFrame()
+				if err := device.EndScene(); err != nil {
+					return err
+				}
+				windowW, windowH := globalWindow.Size()
+				r := &d3d9.RECT{0, 0, int32(windowW), int32(windowH)}
+				if presentErr := device.Present(r, r, 0, nil); presentErr != nil {
+					if presentErr.Code() == d3d9.ERR_DEVICELOST {
+						deviceIsLost = true
+					} else {
+						return presentErr
+					}
+				}
+
+				if wasUpdated {
+					globalWindow.finishFrame()
+				}
 			}
 		}
 	}
+	// Remove the last quit message. Otherwise opening two windows back to back
+	// will close the second one immediately.
+	w32.PeekMessage(&msg, 0, 0, 0, w32.PM_REMOVE)
 
 	for _, tex := range globalWindow.textures {
 		tex.texture.Release()
@@ -285,20 +361,37 @@ func hideConsoleWindow() {
 }
 
 type window struct {
-	handle    w32.HWND
-	device    *d3d9.Device
-	d3d9Error d3d9.Error
-	running   bool
-	mouse     struct{ x, y int }
-	keyDown   [keyCount]bool
-	mouseDown [mouseButtonCount]bool
-	pressed   []Key
-	clicks    []MouseClick
-	soundOn   bool
-	sounds    map[string]mixer.SoundSource
-	text      string
-	textures  map[string]sizedTexture
+	handle       w32.HWND
+	device       *d3d9.Device
+	d3d9Error    d3d9.Error
+	running      bool
+	isFullscreen bool
+	windowed     w32.WINDOWPLACEMENT
+	cursorHidden bool
+	mouse        struct{ x, y int }
+	wheelX       float64
+	wheelY       float64
+	keyDown      [keyCount]bool
+	mouseDown    [mouseButtonCount]bool
+	pressed      []Key
+	clicks       []MouseClick
+	soundOn      bool
+	sounds       map[string]mixer.SoundSource
+	text         string
+	textures     map[string]sizedTexture
+	backlog      []float32
+	backlogType  shape
 }
+
+type shape int
+
+const (
+	nothing shape = iota
+	rectangles
+	points
+	lines
+	texts
+)
 
 func handleMessage(window w32.HWND, msg uint32, w, l uintptr) uintptr {
 	switch msg {
@@ -346,8 +439,16 @@ func handleMessage(window w32.HWND, msg uint32, w, l uintptr) uintptr {
 	case w32.WM_MBUTTONUP:
 		globalWindow.mouseEvent(MiddleButton, false)
 		return 1
+	case w32.WM_MOUSEWHEEL:
+		globalWindow.wheelY += float64(int16(w32.HIWORD(uint32(w)))) / 120.0
+		return 1
+	case w32.WM_MOUSEHWHEEL:
+		globalWindow.wheelX += float64(int16(w32.HIWORD(uint32(w)))) / 120.0
+		return 1
 	case w32.WM_DESTROY:
-		w32.PostQuitMessage(0)
+		if globalWindow != nil {
+			globalWindow.running = false
+		}
 		return 1
 	default:
 		return w32.DefWindowProc(window, msg, w, l)
@@ -361,6 +462,85 @@ func (w *window) Close() {
 func (w *window) Size() (int, int) {
 	r := w32.GetClientRect(w.handle)
 	return int(r.Right - r.Left), int(r.Bottom - r.Top)
+}
+
+func (w *window) SetFullscreen(f bool) {
+	if f == w.isFullscreen {
+		return
+	}
+
+	if f {
+		w.windowed = enableFullscreen(w.handle)
+	} else {
+		disableFullscreen(w.handle, w.windowed)
+	}
+
+	w.isFullscreen = f
+}
+
+func (w *window) ShowCursor(show bool) {
+	hide := !show
+	if hide == w.cursorHidden {
+		return
+	}
+
+	w.cursorHidden = hide
+	if w.cursorHidden {
+		setShowCursorCountTo(-1)
+	} else {
+		setShowCursorCountTo(0)
+	}
+}
+
+func setShowCursorCountTo(count int) {
+	n := w32.ShowCursor(true)
+	for n < count {
+		n = w32.ShowCursor(true)
+	}
+	for n > count {
+		n = w32.ShowCursor(false)
+	}
+}
+
+// enableFullscreen makes the window a borderless window that covers the full
+// area of the monitor under the window.
+// It returns the previous window placement. Store that value and use it with
+// disableFullscreen to reset the window to what it was before.
+func enableFullscreen(window w32.HWND) (windowed w32.WINDOWPLACEMENT) {
+	style := w32.GetWindowLong(window, w32.GWL_STYLE)
+	var monitorInfo w32.MONITORINFO
+	monitor := w32.MonitorFromWindow(window, w32.MONITOR_DEFAULTTOPRIMARY)
+	if w32.GetWindowPlacement(window, &windowed) &&
+		w32.GetMonitorInfo(monitor, &monitorInfo) {
+		w32.SetWindowLong(
+			window,
+			w32.GWL_STYLE,
+			style & ^w32.WS_OVERLAPPEDWINDOW,
+		)
+		w32.SetWindowPos(
+			window,
+			0,
+			int(monitorInfo.RcMonitor.Left),
+			int(monitorInfo.RcMonitor.Top),
+			int(monitorInfo.RcMonitor.Right-monitorInfo.RcMonitor.Left),
+			int(monitorInfo.RcMonitor.Bottom-monitorInfo.RcMonitor.Top),
+			w32.SWP_NOOWNERZORDER|w32.SWP_FRAMECHANGED,
+		)
+	}
+	return
+}
+
+// disableFullscreen makes the window have a border, title and the close button
+// and places it at the position given by the window placement parameter.
+// Use this in conjunction with enableFullscreen to toggle a window's fullscreen
+// state.
+func disableFullscreen(window w32.HWND, placement w32.WINDOWPLACEMENT) {
+	w32.SetWindowLong(window, w32.GWL_STYLE, windowedStyle)
+	w32.SetWindowPlacement(window, &placement)
+	w32.SetWindowPos(window, 0, 0, 0, 0, 0,
+		w32.SWP_NOMOVE|w32.SWP_NOSIZE|w32.SWP_NOZORDER|
+			w32.SWP_NOOWNERZORDER|w32.SWP_FRAMECHANGED,
+	)
 }
 
 func (w *window) WasKeyPressed(key Key) bool {
@@ -398,14 +578,61 @@ func (w *window) MousePosition() (int, int) {
 	return w.mouse.x, w.mouse.y
 }
 
+func (w *window) MouseWheelX() float64 {
+	return w.wheelX
+}
+
+func (w *window) MouseWheelY() float64 {
+	return w.wheelY
+}
+
 func (w *window) DrawPoint(x, y int, color Color) {
-	data := [...]float32{
+	w.addBacklog(points,
 		float32(x), float32(y), 0, 1, colorToFloat32(color), 0, 0,
+	)
+}
+
+func (w *window) addBacklog(typ shape, data ...float32) {
+	if typ != w.backlogType {
+		w.flushBacklog()
 	}
+	w.backlog = append(w.backlog, data...)
+	w.backlogType = typ
+}
+
+func (w *window) flushBacklog() {
+	if len(w.backlog) == 0 {
+		return
+	}
+
+	switch w.backlogType {
+	case points:
+		w.drawBacklog(d3d9.PT_POINTLIST, 1)
+	case rectangles:
+		w.drawBacklog(d3d9.PT_TRIANGLELIST, 3)
+	case lines:
+		w.drawBacklog(d3d9.PT_LINELIST, 2)
+	case texts:
+		if err := w.device.SetTexture(0, w.textures[fontTextureID].texture); err != nil {
+			w.d3d9Error = err
+		}
+
+		w.drawBacklog(d3d9.PT_TRIANGLELIST, 3)
+
+		if err := w.device.SetTexture(0, nil); err != nil {
+			w.d3d9Error = err
+		}
+	}
+
+	w.backlog = w.backlog[:0]
+	w.backlogType = nothing
+}
+
+func (w *window) drawBacklog(primitive d3d9.PRIMITIVETYPE, verticesPerPrimitive int) {
 	if err := w.device.DrawPrimitiveUP(
-		d3d9.PT_POINTLIST,
-		1,
-		uintptr(unsafe.Pointer(&data[0])),
+		primitive,
+		uint(len(w.backlog)/(verticesPerPrimitive*vertexStride/4)),
+		uintptr(unsafe.Pointer(&w.backlog[0])),
 		vertexStride,
 	); err != nil {
 		w.d3d9Error = err
@@ -419,20 +646,10 @@ func (w *window) DrawLine(fromX, fromY, toX, toY int, color Color) {
 	}
 
 	col := colorToFloat32(color)
-	fx, fy := float32(fromX), float32(fromY)
-	fx2, fy2 := float32(toX), float32(toY)
-	data := [...]float32{
-		fx, fy, 0, 1, col, 0, 0,
-		fx2, fy2, 0, 1, col, 0, 0,
-	}
-	if err := w.device.DrawPrimitiveUP(
-		d3d9.PT_LINELIST,
-		1,
-		uintptr(unsafe.Pointer(&data[0])),
-		vertexStride,
-	); err != nil {
-		w.d3d9Error = err
-	}
+	w.addBacklog(lines,
+		float32(fromX), float32(fromY), 0, 1, col, 0, 0,
+		float32(toX), float32(toY), 0, 1, col, 0, 0,
+	)
 }
 
 func (w *window) DrawRect(x, y, width, height int, color Color) {
@@ -455,20 +672,15 @@ func (w *window) FillRect(x, y, width, height int, color Color) {
 	var col float32 = *(*float32)(unsafe.Pointer(&d3dColor))
 	fx, fy := float32(x), float32(y)
 	fx2, fy2 := float32(x+width), float32(y+height)
-	data := [...]float32{
+	w.addBacklog(rectangles,
 		fx, fy, 0, 1, col, 0, 0,
 		fx2, fy, 0, 1, col, 0, 0,
 		fx, fy2, 0, 1, col, 0, 0,
+
+		fx, fy2, 0, 1, col, 0, 0,
+		fx2, fy, 0, 1, col, 0, 0,
 		fx2, fy2, 0, 1, col, 0, 0,
-	}
-	if err := w.device.DrawPrimitiveUP(
-		d3d9.PT_TRIANGLESTRIP,
-		2,
-		uintptr(unsafe.Pointer(&data[0])),
-		vertexStride,
-	); err != nil {
-		w.d3d9Error = err
-	}
+	)
 }
 
 func (w *window) DrawEllipse(x, y, width, height int, color Color) {
@@ -476,25 +688,12 @@ func (w *window) DrawEllipse(x, y, width, height int, color Color) {
 	if len(outline) == 0 {
 		return
 	}
-	data := make([]float32, len(outline)*7)
+
 	col := colorToFloat32(color)
 	for i := range outline {
-		j := i * 7
-		data[j+0] = float32(outline[i].x)
-		data[j+1] = float32(outline[i].y)
-		data[j+2] = 0
-		data[j+3] = 1
-		data[j+4] = col
-		data[j+5] = 0
-		data[j+6] = 0
-	}
-	if err := w.device.DrawPrimitiveUP(
-		d3d9.PT_POINTLIST,
-		uint(len(outline)),
-		uintptr(unsafe.Pointer(&data[0])),
-		vertexStride,
-	); err != nil {
-		w.d3d9Error = err
+		w.addBacklog(points,
+			float32(outline[i].x), float32(outline[i].y), 0, 1, col, 0, 0,
+		)
 	}
 }
 
@@ -503,47 +702,49 @@ func (w *window) FillEllipse(x, y, width, height int, color Color) {
 	if len(area) == 0 {
 		return
 	}
+
 	col := colorToFloat32(color)
-	data := make([]float32, len(area)*7)
 	for i := range area {
-		j := i * 7
-		data[j+0] = float32(area[i].x)
-		data[j+1] = float32(area[i].y)
-		data[j+2] = 0
-		data[j+3] = 1
-		data[j+4] = col
-		data[j+5] = 0
-		data[j+6] = 0
-	}
-	// now offset every right point in each line by +0.5, otherwise they might
-	// not be fully visible
-	for i := 8; i < len(data); i += 14 {
-		data[i-1] += 0.5
-	}
-	if err := w.device.DrawPrimitiveUP(
-		d3d9.PT_LINELIST,
-		uint(len(area)/2),
-		uintptr(unsafe.Pointer(&data[0])),
-		vertexStride,
-	); err != nil {
-		w.d3d9Error = err
+		x, y := float32(area[i].x), float32(area[i].y)
+		if i%2 == 1 {
+			// Offset every right point in each line by +0.5, otherwise they
+			// might not be fully visible.
+			x += 0.5
+		}
+		w.addBacklog(lines, x, y, 0, 1, col, 0, 0)
 	}
 }
 
 func (w *window) DrawImageFile(path string, x, y int) error {
-	return w.renderImage(path, x, y, -1, -1, 0)
+	return w.renderImage(path, x, y, 0, 0, 0, 0, 0, 0, 0)
 }
 
 func (w *window) DrawImageFileRotated(path string, x, y, degrees int) error {
-	return w.renderImage(path, x, y, -1, -1, degrees)
+	return w.renderImage(path, x, y, 0, 0, 0, 0, 0, 0, degrees)
 }
 
 func (w *window) DrawImageFileTo(path string, x, y, width, height, degrees int) error {
-	if width <= 0 || height <= 0 {
+	if width == 0 || height == 0 {
 		return nil
 	}
+	return w.renderImage(path, x, y, width, height, 0, 0, 0, 0, degrees)
+}
 
-	return w.renderImage(path, x, y, width, height, degrees)
+func (w *window) DrawImageFilePart(
+	path string,
+	sourceX, sourceY, sourceWidth, sourceHeight int,
+	destX, destY, destWidth, destHeight int,
+	rotationCWDeg int,
+) error {
+	if sourceWidth == 0 || sourceHeight == 0 || destWidth == 0 || destHeight == 0 {
+		return nil
+	}
+	return w.renderImage(
+		path,
+		destX, destY, destWidth, destHeight,
+		sourceX, sourceY, sourceWidth, sourceHeight,
+		rotationCWDeg,
+	)
 }
 
 func (win *window) GetTextSize(text string) (w, h int) {
@@ -551,18 +752,15 @@ func (win *window) GetTextSize(text string) (w, h int) {
 }
 
 func (win *window) GetScaledTextSize(text string, scale float32) (w, h int) {
-	if len(text) == 0 || scale <= 0 {
-		return 0, 0
-	}
-
 	charW := int(float32(fontCharW)*scale + 0.5)
 	charH := int(float32(fontCharH)*scale + 0.5)
 
 	lines := strings.Split(text, "\n")
 	maxLineW := 0
 	for _, line := range lines {
-		if len(line) > maxLineW {
-			maxLineW = len(line)
+		w := utf8.RuneCountInString(line)
+		if w > maxLineW {
+			maxLineW = w
 		}
 	}
 	return charW * maxLineW, charH * len(lines)
@@ -577,8 +775,6 @@ func (w *window) DrawScaledText(text string, x, y int, scale float32, color Colo
 		return
 	}
 
-	texture := w.textures[fontTextureID]
-	data := make([]float32, 0, vertexStride/4*len(text))
 	width := int(float32(fontCharW)*scale + 0.5)
 	height := int(float32(fontCharH)*scale + 0.5)
 	col := colorToFloat32(color)
@@ -591,16 +787,14 @@ func (w *window) DrawScaledText(text string, x, y int, scale float32, color Colo
 			destY += height
 			continue
 		}
-		if r < 0 || r >= 128 {
-			r = '?'
-		}
+		r = runeToFont(r)
 
 		charCount++
 
 		u := float32(r%16) / 16
 		v := float32(r/16) / 16
 
-		data = append(data,
+		w.addBacklog(texts,
 			float32(destX)-0.5, float32(destY)-0.5, 0, 1, col, u, v,
 			float32(destX+width)-0.5, float32(destY)-0.5, 0, 1, col, u+1.0/16, v,
 			float32(destX)-0.5, float32(destY+height)-0.5, 0, 1, col, u, v+1.0/16,
@@ -612,25 +806,6 @@ func (w *window) DrawScaledText(text string, x, y int, scale float32, color Colo
 
 		destX += width
 	}
-
-	if err := w.device.SetTexture(0, texture.texture); err != nil {
-		w.d3d9Error = err
-		return
-	}
-
-	if err := w.device.DrawPrimitiveUP(
-		d3d9.PT_TRIANGLELIST,
-		charCount*2,
-		uintptr(unsafe.Pointer(&data[0])),
-		vertexStride,
-	); err != nil {
-		w.d3d9Error = err
-	}
-
-	// reset the texture
-	if err := w.device.SetTexture(0, nil); err != nil {
-		w.d3d9Error = err
-	}
 }
 
 func (w *window) PlaySoundFile(path string) error {
@@ -639,7 +814,13 @@ func (w *window) PlaySoundFile(path string) error {
 	}
 	source, ok := w.sounds[path]
 	if !ok {
-		wave, err := wav.LoadFromFile(path)
+		f, err := OpenFile(path)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		wave, err := wav.Read(f)
 		if err != nil {
 			return err
 		}
@@ -685,6 +866,8 @@ func getTextSizeInCharacters(text string) (int, int) {
 func (w *window) finishFrame() {
 	w.pressed = w.pressed[0:0]
 	w.clicks = w.clicks[0:0]
+	w.wheelX = 0
+	w.wheelY = 0
 	w.text = ""
 }
 
@@ -706,13 +889,13 @@ func (w *window) loadFontTexture() error {
 }
 
 func (w *window) loadTexture(path string) error {
-	file, err := os.Open(path)
+	file, err := OpenFile(path)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 
-	img, err := png.Decode(file)
+	img, _, err := image.Decode(file)
 	if err != nil {
 		return err
 	}
@@ -770,7 +953,14 @@ type sizedTexture struct {
 	width, height int
 }
 
-func (w *window) renderImage(path string, x, y, width, height, degrees int) error {
+func (w *window) renderImage(
+	path string,
+	x, y, width, height int,
+	srcX, srcY, srcW, srcH int,
+	degrees int,
+) error {
+	w.flushBacklog()
+
 	if _, ok := w.textures[path]; !ok {
 		if err := w.loadTexture(path); err != nil {
 			return err
@@ -782,12 +972,12 @@ func (w *window) renderImage(path string, x, y, width, height, degrees int) erro
 		return errors.New("texture not found after loading: " + path)
 	}
 
-	if width == -1 && height == -1 {
+	if width == 0 {
 		width, height = texture.width, texture.height
 	}
 
-	if err := w.device.SetTexture(0, texture.texture); err != nil {
-		return err
+	if srcW == 0 {
+		srcW, srcH = texture.width, texture.height
 	}
 
 	col := colorToFloat32(White)
@@ -798,8 +988,12 @@ func (w *window) renderImage(path string, x, y, width, height, degrees int) erro
 	x3, y3 := -fw/2, fh/2
 	x4, y4 := fw/2, fh/2
 
-	s, c := math.Sincos(float64(degrees) / 180 * math.Pi)
-	sin, cos := float32(s), float32(c)
+	var sin, cos float32 = 0, 1
+	if degrees != 0 {
+		s, c := math.Sincos(float64(degrees) / 180 * math.Pi)
+		sin, cos = float32(s), float32(c)
+	}
+
 	x1, y1 = cos*x1-sin*y1, sin*x1+cos*y1
 	x2, y2 = cos*x2-sin*y2, sin*x2+cos*y2
 	x3, y3 = cos*x3-sin*y3, sin*x3+cos*y3
@@ -807,12 +1001,23 @@ func (w *window) renderImage(path string, x, y, width, height, degrees int) erro
 
 	dx := fx + fw/2 - 0.5
 	dy := fy + fh/2 - 0.5
+
+	u1 := float32(srcX) / float32(texture.width)
+	u2 := float32(srcX+srcW) / float32(texture.width)
+	v1 := float32(srcY) / float32(texture.height)
+	v2 := float32(srcY+srcH) / float32(texture.height)
+
 	data := [...]float32{
-		x1 + dx, y1 + dy, 0, 1, col, 0, 0,
-		x2 + dx, y2 + dy, 0, 1, col, 1, 0,
-		x3 + dx, y3 + dy, 0, 1, col, 0, 1,
-		x4 + dx, y4 + dy, 0, 1, col, 1, 1,
+		x1 + dx, y1 + dy, 0, 1, col, u1, v1,
+		x2 + dx, y2 + dy, 0, 1, col, u2, v1,
+		x3 + dx, y3 + dy, 0, 1, col, u1, v2,
+		x4 + dx, y4 + dy, 0, 1, col, u2, v2,
 	}
+
+	if err := w.device.SetTexture(0, texture.texture); err != nil {
+		return err
+	}
+
 	if err := w.device.DrawPrimitiveUP(
 		d3d9.PT_TRIANGLESTRIP,
 		2,
@@ -845,30 +1050,9 @@ func rawInputToKey(kb w32.RAWKEYBOARD) (key Key, down bool) {
 			uint(scanCode),
 			w32.MAPVK_VSC_TO_VK_EX,
 		))
-	} else if virtualKey == w32.VK_NUMLOCK {
-		// correct PAUSE/BREAK and NUM LOCK silliness, and set the extended
-		// bit
-		scanCode = uint16(w32.MapVirtualKey(
-			uint(virtualKey),
-			w32.MAPVK_VK_TO_VSC,
-		) | 0x100)
 	}
 
 	isE0 := (flags & w32.RI_KEY_E0) != 0
-	isE1 := (flags & w32.RI_KEY_E1) != 0
-
-	if isE1 {
-		// for escaped sequences, turn the virtual key into the correct scan code using MapVirtualKey.
-		// however, MapVirtualKey is unable to map VK_PAUSE (this is a known bug), hence we map that by hand.
-		if virtualKey == w32.VK_PAUSE {
-			scanCode = 0x45
-		} else {
-			scanCode = uint16(w32.MapVirtualKey(
-				uint(virtualKey),
-				w32.MAPVK_VK_TO_VSC,
-			))
-		}
-	}
 
 	switch virtualKey {
 	case w32.VK_CONTROL:

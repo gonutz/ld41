@@ -2,11 +2,12 @@ package main
 
 import (
 	"fmt"
-	"github.com/gonutz/prototype/draw"
 	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/gonutz/prototype/draw"
 )
 
 const (
