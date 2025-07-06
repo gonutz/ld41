@@ -430,7 +430,10 @@ func (s *playingState) shoot(window draw.Window) {
 		b.dx = bulletSpeed
 	}
 	s.bullets = append(s.bullets, b)
-	s.assignment = s.generator.generate(rand.Int)
+	oldAssignment := s.assignment
+	for s.assignment == oldAssignment {
+		s.assignment = s.generator.generate(rand.Int)
+	}
 	s.torso = shooting
 	s.torsoTime = frames(100 * time.Millisecond)
 }
