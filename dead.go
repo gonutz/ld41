@@ -43,7 +43,6 @@ func (s *deadState) enter(oldState state) {
 		s.score = score
 		s.highscores = append(s.highscores, highscore{
 			score: score,
-			name:  "",
 			id:    1,
 		})
 		sort.Stable(byScore(s.highscores))
