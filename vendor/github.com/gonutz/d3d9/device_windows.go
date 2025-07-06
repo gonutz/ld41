@@ -1,6 +1,7 @@
 package d3d9
 
 import (
+	"math"
 	"syscall"
 	"unsafe"
 )
@@ -661,13 +662,20 @@ func (obj *Device) UpdateSurface(
 }
 
 // UpdateTexture updates the dirty portions of a texture.
-func (obj *Device) UpdateTexture(sourceTexture, destTexture *BaseTexture) Error {
+func (obj *Device) UpdateTexture(sourceTexture, destTexture BaseTextureImpl) Error {
+	var src, dest uintptr
+	if sourceTexture != nil {
+		src = sourceTexture.baseTexturePointer()
+	}
+	if destTexture != nil {
+		dest = destTexture.baseTexturePointer()
+	}
 	ret, _, _ := syscall.Syscall(
 		obj.vtbl.UpdateTexture,
 		3,
 		uintptr(unsafe.Pointer(obj)),
-		uintptr(unsafe.Pointer(sourceTexture)),
-		uintptr(unsafe.Pointer(destTexture)),
+		src,
+		dest,
 	)
 	return toErr(ret)
 }
@@ -868,7 +876,7 @@ func (obj *Device) Clear(
 		uintptr(unsafe.Pointer(rectPtr)),
 		uintptr(flags),
 		uintptr(color),
-		uintptr(z),
+		uintptr(math.Float32bits(z)),
 		uintptr(stencil),
 		0,
 		0,
@@ -1055,7 +1063,7 @@ func (obj *Device) SetRenderState(state RENDERSTATETYPE, value uint32) Error {
 }
 
 func (obj *Device) SetRenderStateFloat(state RENDERSTATETYPE, value float32) Error {
-	return obj.SetRenderState(state, *((*uint32)(unsafe.Pointer(&value))))
+	return obj.SetRenderState(state, math.Float32bits(value))
 }
 
 func (obj *Device) SetRenderStateBool(state RENDERSTATETYPE, value bool) Error {
@@ -1381,7 +1389,7 @@ func (obj *Device) SetNPatchMode(segmentCount float32) Error {
 		obj.vtbl.SetNPatchMode,
 		2,
 		uintptr(unsafe.Pointer(obj)),
-		uintptr(segmentCount),
+		uintptr(math.Float32bits(segmentCount)),
 		0,
 	)
 	return toErr(ret)
@@ -1396,7 +1404,7 @@ func (obj *Device) GetNPatchMode() float32 {
 		0,
 		0,
 	)
-	return float32(ret)
+	return math.Float32frombits(uint32(ret))
 }
 
 // DrawPrimitive renders a sequence of nonindexed, geometric primitives of the
@@ -1497,7 +1505,7 @@ func (obj *Device) DrawIndexedPrimitiveUP(
 // DrawIndexedPrimitiveUPuint32 renders the specified geometric primitive with
 // data specified by a user memory pointer.
 func (obj *Device) DrawIndexedPrimitiveUPuint32(
-	primitiveType PRIMITIVETYPE,
+	typ PRIMITIVETYPE,
 	minVertexIndex uint,
 	numVertices uint,
 	primitiveCount uint,
@@ -1506,7 +1514,7 @@ func (obj *Device) DrawIndexedPrimitiveUPuint32(
 	vertexStreamZeroStride uint,
 ) Error {
 	return obj.DrawIndexedPrimitiveUP(
-		primitiveType,
+		typ,
 		minVertexIndex,
 		numVertices,
 		primitiveCount,
@@ -1520,18 +1528,16 @@ func (obj *Device) DrawIndexedPrimitiveUPuint32(
 // DrawIndexedPrimitiveUPuint16 renders the specified geometric primitive with
 // data specified by a user memory pointer.
 func (obj *Device) DrawIndexedPrimitiveUPuint16(
-	primitiveType PRIMITIVETYPE,
+	typ PRIMITIVETYPE,
 	minVertexIndex uint,
 	numVertices uint,
 	primitiveCount uint,
 	indexData []uint16,
 	vertexStreamZeroData uintptr,
 	vertexStreamZeroStride uint,
-) (
-	err Error,
-) {
+) Error {
 	return obj.DrawIndexedPrimitiveUP(
-		primitiveType,
+		typ,
 		minVertexIndex,
 		numVertices,
 		primitiveCount,

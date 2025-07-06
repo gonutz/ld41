@@ -43,15 +43,15 @@ func main() {
 	state.enter(nil)
 
 	var musicStart time.Time
-	iconWasSet := false
+	firstFrame := true
 
 	check(draw.RunWindow(windowTitle, windowW, windowH, func(window draw.Window) {
-		if !iconWasSet {
+		if firstFrame {
 			setIcon()
-			iconWasSet = true
+			window.ShowCursor(false)
+			preloadAssets(window)
+			firstFrame = false
 		}
-
-		window.ShowCursor(false)
 
 		newState := state.update(window)
 		if state != newState {
@@ -66,6 +66,13 @@ func main() {
 			musicStart = now
 		}
 	}))
+}
+
+func preloadAssets(window draw.Window) {
+	files, _ := rsc.ReadDir("rsc")
+	for _, file := range files {
+		window.DrawImageFile(file.Name(), -9999, -9999)
+	}
 }
 
 func check(err error) {

@@ -1,5 +1,3 @@
-// +build !sdl2
-
 package draw
 
 import (

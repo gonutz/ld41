@@ -7,16 +7,14 @@ package draw
 
 import (
 	"io"
-	"os"
 	"strconv"
 )
 
 // OpenFile allows you to re-direct from the file system to your own data
-// storage for image and sound files. It defaults to os.Open but you can
-// overwrite it with any function that fits the signature.
-var OpenFile = func(path string) (io.ReadCloser, error) {
-	return os.Open(path)
-}
+// storage for image and sound files. It defaults to os.Open on desktop and to
+// fetching URLs for WASM. You can overwrite it with any function that fits the
+// signature, e.g. to open files from an embed.FS.
+var OpenFile func(path string) (io.ReadCloser, error) = DefaultOpenFile
 
 // UpdateFunction is used as a callback when creating a window. It is called
 // at 60Hz and you do all your event handling and drawing in it.
@@ -42,6 +40,12 @@ type Window interface {
 	// Use Window.Size to get the new size after this.
 	// By default the window is not fullscreen. It always starts windowed.
 	SetFullscreen(f bool)
+
+	// IsFullscreen returns true if the window is currently in fullscreen mode.
+	// This might be different from the last state set with SetFullscreen, e.g.
+	// in the browser, the user has ways to disable fullscreen without going
+	// through SetFullscreen.
+	IsFullscreen() bool
 
 	// ShowCursor set the OS' mouse cursor to visible or invisible. It defaults
 	// to visible if you do not call ShowCursor.
@@ -110,6 +114,11 @@ type Window interface {
 	// instaed of only drawing the outline.
 	FillEllipse(x, y, width, height int, color Color)
 
+	// ImageSize returns the given image file's width and height in pixels. It
+	// fails with an error if e.g. the file does not exist or is not a
+	// supported image file format.
+	ImageSize(path string) (width, height int, err error)
+
 	// DrawImageFile draws the untransformed image at the give position. If the
 	// image file is not found or has the wrong format an error is returned.
 	DrawImageFile(path string, x, y int) error
@@ -151,6 +160,12 @@ type Window interface {
 		destX, destY, destWidth, destHeight int,
 		rotationCWDeg int,
 	) error
+
+	// BlurImages sets the state for future calls to any of the
+	// DrawImageFile... functions. Setting blur to true will draw images using
+	// anti-aliasing. Setting blur to false will use nearest-neighbor sampling
+	// when scaling images.
+	BlurImages(blur bool)
 
 	// GetTextSize returns the size the given text would have when being drawn.
 	GetTextSize(text string) (w, h int)

@@ -1,4 +1,5 @@
-// +build !sdl2,!glfw
+//go:build !glfw && !js && windows
+// +build !glfw,!js,windows
 
 package draw
 
@@ -74,10 +75,11 @@ func RunWindow(title string, width, height int, update UpdateFunction) error {
 	defer d3d.Release()
 
 	globalWindow = &window{
-		running:  true,
-		soundOn:  soundOn,
-		sounds:   make(map[string]mixer.SoundSource),
-		textures: make(map[string]sizedTexture),
+		running:   true,
+		soundOn:   soundOn,
+		sounds:    make(map[string]mixer.SoundSource),
+		textures:  make(map[string]sizedTexture),
+		curFilter: d3d9.TEXF_NONE,
 	}
 
 	class := w32.WNDCLASSEX{
@@ -92,7 +94,7 @@ func RunWindow(title string, width, height int, update UpdateFunction) error {
 	}
 	defer w32.UnregisterClassAtom(atom, w32.GetModuleHandle(""))
 
-	var windowSize = w32.RECT{0, 0, int32(width), int32(height)}
+	var windowSize = w32.RECT{Right: int32(width), Bottom: int32(height)}
 	// NOTE MSDN says you cannot pass WS_OVERLAPPED to this function but it
 	// seems to work (on XP and Windows 8.1 at least) in conjuntion with the
 	// other flags
@@ -232,7 +234,12 @@ func RunWindow(title string, width, height int, update UpdateFunction) error {
 		device.SetRenderState(d3d9.RS_SRCBLEND, d3d9.BLEND_SRCALPHA)
 		device.SetRenderState(d3d9.RS_DESTBLEND, d3d9.BLEND_INVSRCALPHA)
 		device.SetRenderState(d3d9.RS_ALPHABLENDENABLE, 1)
-		// use nearest neighbor texture filtering
+
+		device.SetSamplerState(0, d3d9.SAMP_ADDRESSU, d3d9.TADDRESS_BORDER)
+		device.SetSamplerState(0, d3d9.SAMP_ADDRESSV, d3d9.TADDRESS_BORDER)
+		device.SetSamplerState(0, d3d9.SAMP_BORDERCOLOR, 0)
+
+		// Use nearest neighbor texture filtering.
 		device.SetSamplerState(0, d3d9.SAMP_MINFILTER, d3d9.TEXF_NONE)
 		device.SetSamplerState(0, d3d9.SAMP_MAGFILTER, d3d9.TEXF_NONE)
 
@@ -298,6 +305,7 @@ func RunWindow(title string, width, height int, update UpdateFunction) error {
 					// clear the screen to black before the update
 					w, h := globalWindow.Size()
 					globalWindow.FillRect(0, 0, w, h, Black)
+					globalWindow.updateMouseInfo()
 					update(globalWindow)
 					globalWindow.flushBacklog()
 					wasUpdated = true
@@ -313,7 +321,7 @@ func RunWindow(title string, width, height int, update UpdateFunction) error {
 					return err
 				}
 				windowW, windowH := globalWindow.Size()
-				r := &d3d9.RECT{0, 0, int32(windowW), int32(windowH)}
+				r := &d3d9.RECT{Right: int32(windowW), Bottom: int32(windowH)}
 				if presentErr := device.Present(r, r, 0, nil); presentErr != nil {
 					if presentErr.Code() == d3d9.ERR_DEVICELOST {
 						deviceIsLost = true
@@ -368,6 +376,8 @@ type window struct {
 	isFullscreen bool
 	windowed     w32.WINDOWPLACEMENT
 	cursorHidden bool
+	blurImages   bool
+	curFilter    uint32
 	mouse        struct{ x, y int }
 	wheelX       float64
 	wheelY       float64
@@ -398,58 +408,67 @@ func handleMessage(window w32.HWND, msg uint32, w, l uintptr) uintptr {
 	case w32.WM_INPUT:
 		raw, ok := w32.GetRawInputData(w32.HRAWINPUT(l), w32.RID_INPUT)
 		if !ok {
-			return 1
+			return 0
 		}
 		if raw.Header.Type != w32.RIM_TYPEKEYBOARD {
-			return 1
+			return 0
 		}
 		key, down := rawInputToKey(raw.GetKeyboard())
 		if key != 0 {
+			wasDown := globalWindow.keyDown[key]
 			globalWindow.keyDown[key] = down
-			if down {
+			if down && !wasDown {
 				globalWindow.pressed = append(globalWindow.pressed, key)
 				if key == KeyF4 && globalWindow.IsKeyDown(KeyLeftAlt) {
 					globalWindow.Close()
 				}
 			}
 		}
-		return 1
+		return 0
 	case w32.WM_CHAR:
-		globalWindow.text += string(utf16.Decode([]uint16{uint16(w)})[0])
-		return 1
+		r := utf16.Decode([]uint16{uint16(w)})[0]
+		if r >= ' ' {
+			globalWindow.text += string(r)
+		}
+		return 0
 	case w32.WM_MOUSEMOVE:
 		globalWindow.mouse.x = int(int16(w32.LOWORD(uint32(l))))
 		globalWindow.mouse.y = int(int16(w32.HIWORD(uint32(l))))
-		return 1
+		return 0
 	case w32.WM_LBUTTONDOWN:
 		globalWindow.mouseEvent(LeftButton, true)
-		return 1
+		return 0
 	case w32.WM_LBUTTONUP:
 		globalWindow.mouseEvent(LeftButton, false)
-		return 1
+		return 0
 	case w32.WM_RBUTTONDOWN:
 		globalWindow.mouseEvent(RightButton, true)
-		return 1
+		return 0
 	case w32.WM_RBUTTONUP:
 		globalWindow.mouseEvent(RightButton, false)
-		return 1
+		return 0
 	case w32.WM_MBUTTONDOWN:
 		globalWindow.mouseEvent(MiddleButton, true)
-		return 1
+		return 0
 	case w32.WM_MBUTTONUP:
 		globalWindow.mouseEvent(MiddleButton, false)
-		return 1
+		return 0
 	case w32.WM_MOUSEWHEEL:
 		globalWindow.wheelY += float64(int16(w32.HIWORD(uint32(w)))) / 120.0
-		return 1
+		return 0
 	case w32.WM_MOUSEHWHEEL:
 		globalWindow.wheelX += float64(int16(w32.HIWORD(uint32(w)))) / 120.0
-		return 1
+		return 0
 	case w32.WM_DESTROY:
 		if globalWindow != nil {
 			globalWindow.running = false
 		}
-		return 1
+		return 0
+	case w32.WM_SYSCOMMAND:
+		if w == w32.SC_SCREENSAVE {
+			return 0
+		}
+		return w32.DefWindowProc(window, msg, w, l)
 	default:
 		return w32.DefWindowProc(window, msg, w, l)
 	}
@@ -476,6 +495,10 @@ func (w *window) SetFullscreen(f bool) {
 	}
 
 	w.isFullscreen = f
+}
+
+func (w *window) IsFullscreen() bool {
+	return w.isFullscreen
 }
 
 func (w *window) ShowCursor(show bool) {
@@ -574,6 +597,28 @@ func (w *window) Clicks() []MouseClick {
 	return w.clicks
 }
 
+func (w *window) updateMouseInfo() {
+	// Read the mouse cursor position.
+	screenX, screenY, ok := w32.GetCursorPos()
+	if ok {
+		windowX, windowY, ok := w32.ScreenToClient(w.handle, screenX, screenY)
+		if ok {
+			w.mouse.x, w.mouse.y = windowX, windowY
+		}
+	}
+
+	// Read the mouse button states.
+	left := w32.GetAsyncKeyState(w32.VK_LBUTTON)
+	right := w32.GetAsyncKeyState(w32.VK_RBUTTON)
+	middle := w32.GetAsyncKeyState(w32.VK_MBUTTON)
+	if w32.GetSystemMetrics(w32.SM_SWAPBUTTON) != 0 {
+		left, right = right, left
+	}
+	w.mouseDown[LeftButton] = left&0x8000 != 0
+	w.mouseDown[RightButton] = right&0x8000 != 0
+	w.mouseDown[MiddleButton] = middle&0x8000 != 0
+}
+
 func (w *window) MousePosition() (int, int) {
 	return w.mouse.x, w.mouse.y
 }
@@ -613,6 +658,8 @@ func (w *window) flushBacklog() {
 	case lines:
 		w.drawBacklog(d3d9.PT_LINELIST, 2)
 	case texts:
+		w.updateTextureFilter(true)
+
 		if err := w.device.SetTexture(0, w.textures[fontTextureID].texture); err != nil {
 			w.d3d9Error = err
 		}
@@ -715,6 +762,21 @@ func (w *window) FillEllipse(x, y, width, height int, color Color) {
 	}
 }
 
+func (w *window) ImageSize(path string) (width, height int, err error) {
+	if _, ok := w.textures[path]; !ok {
+		if err := w.loadTexture(path); err != nil {
+			return 0, 0, err
+		}
+	}
+
+	texture, ok := w.textures[path]
+	if !ok {
+		return 0, 0, errors.New("texture not found after loading: " + path)
+	}
+
+	return texture.width, texture.height, nil
+}
+
 func (w *window) DrawImageFile(path string, x, y int) error {
 	return w.renderImage(path, x, y, 0, 0, 0, 0, 0, 0, 0)
 }
@@ -747,14 +809,16 @@ func (w *window) DrawImageFilePart(
 	)
 }
 
+func (w *window) BlurImages(blur bool) {
+	w.blurImages = blur
+}
+
 func (win *window) GetTextSize(text string) (w, h int) {
 	return win.GetScaledTextSize(text, 1)
 }
 
-func (win *window) GetScaledTextSize(text string, scale float32) (w, h int) {
-	charW := int(float32(fontCharW)*scale + 0.5)
-	charH := int(float32(fontCharH)*scale + 0.5)
-
+func (w *window) GetScaledTextSize(text string, scale float32) (width, height int) {
+	scale *= fontBaseScale
 	lines := strings.Split(text, "\n")
 	maxLineW := 0
 	for _, line := range lines {
@@ -763,7 +827,12 @@ func (win *window) GetScaledTextSize(text string, scale float32) (w, h int) {
 			maxLineW = w
 		}
 	}
-	return charW * maxLineW, charH * len(lines)
+
+	charW := fontCharW - 2*fontGlyphMargin
+	charH := fontCharH - 2*fontGlyphMargin
+	width = int(float32(charW*maxLineW)*scale*fontKerningFactor + 0.5)
+	height = int(float32(charH*len(lines))*scale + 0.5)
+	return width, height
 }
 
 func (w *window) DrawText(text string, x, y int, color Color) {
@@ -775,33 +844,41 @@ func (w *window) DrawScaledText(text string, x, y int, scale float32, color Colo
 		return
 	}
 
-	width := int(float32(fontCharW)*scale + 0.5)
-	height := int(float32(fontCharH)*scale + 0.5)
+	scale *= fontBaseScale
+
+	fontTextureW := 16 * fontCharW
+	fontTextureH := 16 * fontCharH
+	uOffset := float32(fontGlyphMargin) / float32(fontTextureW)
+	vOffset := float32(fontGlyphMargin) / float32(fontTextureH)
+	uStep := float32(fontCharW) / float32(fontTextureW)
+	vStep := float32(fontCharH) / float32(fontTextureH)
+	uSize := float32(fontCharW-2*fontGlyphMargin) / float32(fontTextureW)
+	vSize := float32(fontCharH-2*fontGlyphMargin) / float32(fontTextureH)
+
+	width := float32(fontCharW-2*fontGlyphMargin) * scale * fontKerningFactor
+	height := float32(fontCharH-2*fontGlyphMargin) * scale
 	col := colorToFloat32(color)
-	destX, destY := x, y
-	var charCount uint
+	destX, destY := float32(x), float32(y)
 
 	for _, r := range text {
 		if r == '\n' {
-			destX = x
+			destX = float32(x)
 			destY += height
 			continue
 		}
-		r = runeToFont(r)
 
-		charCount++
-
-		u := float32(r%16) / 16
-		v := float32(r/16) / 16
+		index := runeToFont(r)
+		u := uOffset + float32(index%16)*uStep
+		v := vOffset + float32(index/16)*vStep
 
 		w.addBacklog(texts,
 			float32(destX)-0.5, float32(destY)-0.5, 0, 1, col, u, v,
-			float32(destX+width)-0.5, float32(destY)-0.5, 0, 1, col, u+1.0/16, v,
-			float32(destX)-0.5, float32(destY+height)-0.5, 0, 1, col, u, v+1.0/16,
+			float32(destX)+width-0.5, float32(destY)-0.5, 0, 1, col, u+uSize, v,
+			float32(destX)-0.5, float32(destY)+height-0.5, 0, 1, col, u, v+vSize,
 
-			float32(destX)-0.5, float32(destY+height)-0.5, 0, 1, col, u, v+1.0/16,
-			float32(destX+width)-0.5, float32(destY)-0.5, 0, 1, col, u+1.0/16, v,
-			float32(destX+width)-0.5, float32(destY+height)-0.5, 0, 1, col, u+1.0/16, v+1.0/16,
+			float32(destX)-0.5, float32(destY)+height-0.5, 0, 1, col, u, v+vSize,
+			float32(destX)+width-0.5, float32(destY)-0.5, 0, 1, col, u+uSize, v,
+			float32(destX)+width-0.5, float32(destY)+height-0.5, 0, 1, col, u+uSize, v+vSize,
 		)
 
 		destX += width
@@ -838,29 +915,21 @@ func (w *window) PlaySoundFile(path string) error {
 
 func (w *window) mouseEvent(button MouseButton, down bool) {
 	w.mouseDown[button] = down
+
 	if down {
 		w.clicks = append(w.clicks, MouseClick{
 			X:      w.mouse.x,
 			Y:      w.mouse.y,
 			Button: button,
 		})
+		w32.SetCapture(w.handle)
 	}
-}
 
-func getTextSizeInCharacters(text string) (int, int) {
-	curCharsX, maxCharsX, lines := 0, 0, 1
-	for _, c := range text {
-		if c == '\n' {
-			if curCharsX > maxCharsX {
-				maxCharsX = curCharsX
-			}
-			lines++
-			curCharsX = 0
-		} else {
-			curCharsX++
-		}
+	if !w.mouseDown[LeftButton] &&
+		!w.mouseDown[MiddleButton] &&
+		!w.mouseDown[RightButton] {
+		w32.ReleaseCapture()
 	}
-	return maxCharsX, lines
 }
 
 func (w *window) finishFrame() {
@@ -885,7 +954,51 @@ func (w *window) loadFontTexture() error {
 	fontCharW = img.Bounds().Dx() / 16
 	fontCharH = img.Bounds().Dy() / 16
 
-	return w.createTexture(fontTextureID, img)
+	nrgba := image.NewNRGBA(img.Bounds())
+	draw.Draw(nrgba, nrgba.Bounds(), img, image.ZP, draw.Src)
+
+	texture, err := w.device.CreateTexture(
+		uint(nrgba.Bounds().Dx()),
+		uint(nrgba.Bounds().Dy()),
+		5,
+		0,
+		d3d9.FMT_A8R8G8B8,
+		d3d9.POOL_MANAGED,
+		0,
+	)
+	if err != nil {
+		return errors.New("d3d9.Device.CreateTexture in POOL_DEFAULT: " + err.Error())
+	}
+
+	rect, err := texture.LockRect(0, nil, d3d9.LOCK_DISCARD)
+	if err != nil {
+		return errors.New("d3d9.Texture.LockRect: " + err.Error())
+	}
+	rect.SetAllBytes(nrgba.Pix, nrgba.Stride)
+	if err := texture.UnlockRect(0); err != nil {
+		return errors.New("d3d9.Texture.UnlockRect: " + err.Error())
+	}
+
+	mipmap := nrgba
+	for i := 0; i < 4; i++ {
+		rect, err = texture.LockRect(uint(i+1), nil, d3d9.LOCK_DISCARD)
+		if err != nil {
+			return errors.New("d3d9.Texture.LockRect: " + err.Error())
+		}
+		mipmap = nextFontTextureMipMap(mipmap)
+		rect.SetAllBytes(mipmap.Pix, mipmap.Stride)
+		if err := texture.UnlockRect(uint(i + 1)); err != nil {
+			return errors.New("d3d9.Texture.UnlockRect: " + err.Error())
+		}
+	}
+
+	w.textures[fontTextureID] = sizedTexture{
+		texture: texture,
+		width:   nrgba.Bounds().Dx(),
+		height:  nrgba.Bounds().Dy(),
+	}
+
+	return nil
 }
 
 func (w *window) loadTexture(path string) error {
@@ -917,27 +1030,47 @@ func (w *window) createTexture(path string, img image.Image) error {
 		nrgba.Pix[i], nrgba.Pix[i+2] = nrgba.Pix[i+2], nrgba.Pix[i]
 	}
 
-	texture, err := w.device.CreateTexture(
+	sysTexture, err := w.device.CreateTexture(
 		uint(nrgba.Bounds().Dx()),
 		uint(nrgba.Bounds().Dy()),
 		1,
 		0,
 		d3d9.FMT_A8R8G8B8,
-		d3d9.POOL_MANAGED,
+		d3d9.POOL_SYSTEMMEM,
 		0,
 	)
 	if err != nil {
-		return err
+		return errors.New("d3d9.Device.CreateTexture in POOL_SYSTEMMEM: " + err.Error())
 	}
+	defer sysTexture.Release()
 
-	rect, err := texture.LockRect(0, nil, d3d9.LOCK_DISCARD)
+	rect, err := sysTexture.LockRect(0, nil, d3d9.LOCK_DISCARD)
 	if err != nil {
-		return err
+		return errors.New("d3d9.Texture.LockRect: " + err.Error())
 	}
 	rect.SetAllBytes(nrgba.Pix, nrgba.Stride)
-	if err := texture.UnlockRect(0); err != nil {
-		return err
+	if err := sysTexture.UnlockRect(0); err != nil {
+		return errors.New("d3d9.Texture.UnlockRect: " + err.Error())
 	}
+
+	texture, err := w.device.CreateTexture(
+		uint(nrgba.Bounds().Dx()),
+		uint(nrgba.Bounds().Dy()),
+		0,
+		d3d9.USAGE_AUTOGENMIPMAP,
+		d3d9.FMT_A8R8G8B8,
+		d3d9.POOL_DEFAULT,
+		0,
+	)
+	if err != nil {
+		return errors.New("d3d9.Device.CreateTexture in POOL_DEFAULT: " + err.Error())
+	}
+
+	if err := w.device.UpdateTexture(sysTexture, texture); err != nil {
+		return errors.New("d3d9.Device.UpdateTexture: " + err.Error())
+	}
+
+	texture.GenerateMipSubLevels()
 
 	w.textures[path] = sizedTexture{
 		texture: texture,
@@ -1014,6 +1147,8 @@ func (w *window) renderImage(
 		x4 + dx, y4 + dy, 0, 1, col, u2, v2,
 	}
 
+	w.updateTextureFilter(w.blurImages)
+
 	if err := w.device.SetTexture(0, texture.texture); err != nil {
 		return err
 	}
@@ -1033,6 +1168,20 @@ func (w *window) renderImage(
 	}
 
 	return nil
+}
+
+func (w *window) updateTextureFilter(blur bool) {
+	var wantFilter uint32 = d3d9.TEXF_NONE
+	if blur {
+		wantFilter = d3d9.TEXF_LINEAR
+	}
+
+	if w.curFilter != wantFilter {
+		w.curFilter = wantFilter
+		w.device.SetSamplerState(0, d3d9.SAMP_MINFILTER, wantFilter)
+		w.device.SetSamplerState(0, d3d9.SAMP_MAGFILTER, wantFilter)
+		w.device.SetSamplerState(0, d3d9.SAMP_MIPFILTER, wantFilter)
+	}
 }
 
 func rawInputToKey(kb w32.RAWKEYBOARD) (key Key, down bool) {
@@ -1157,7 +1306,7 @@ func rawInputToKey(kb w32.RAWKEYBOARD) (key Key, down bool) {
 			return KeyLeftShift, down
 		case w32.VK_RSHIFT:
 			return KeyRightShift, down
-		case w32.VK_PRINT:
+		case w32.VK_PRINT, w32.VK_SNAPSHOT:
 			return KeyPrint, down
 		case w32.VK_PAUSE:
 			return KeyPause, down
