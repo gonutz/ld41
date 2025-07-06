@@ -22,7 +22,7 @@ func (*instructionsState) update(window draw.Window) state {
 
   Enter the solution to
 the calculation above your
- head to shoot your rifle.
+  head to shoot your gun.
 
  Failing delays your next
           shot.
