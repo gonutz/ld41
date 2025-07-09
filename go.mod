@@ -3,7 +3,7 @@ module github.com/gonutz/ld41
 go 1.19
 
 require (
-	github.com/gonutz/prototype v1.6.0
+	github.com/gonutz/prototype v1.7.0
 	github.com/gonutz/w32/v2 v2.11.1
 )
 

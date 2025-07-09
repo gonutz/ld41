@@ -47,7 +47,7 @@ func main() {
 
 	check(draw.RunWindow(windowTitle, windowW, windowH, func(window draw.Window) {
 		if firstFrame {
-			setIcon()
+			window.SetIcon("icon.png")
 			window.ShowCursor(false)
 			preloadAssets(window)
 			firstFrame = false

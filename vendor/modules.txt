@@ -15,7 +15,7 @@ github.com/gonutz/glfw/v3.3/glfw
 github.com/gonutz/mixer
 github.com/gonutz/mixer/dsound
 github.com/gonutz/mixer/wav
-# github.com/gonutz/prototype v1.6.0
+# github.com/gonutz/prototype v1.7.0
 ## explicit; go 1.16
 github.com/gonutz/prototype/draw
 # github.com/gonutz/w32/v2 v2.11.1
